@@ -88,12 +88,17 @@ function fetchPrice(){
       return fj('https://blockchain.info/ticker').then(function(d){var p=d.USD.last;C.set('price',p);return{price:p,src:'Blockchain.info'}}).catch(function(){
         var c=C.any('price');return c?{price:c.value,src:'Cached',stale:true,ct:c.ts}:{price:0,src:'Unavailable',err:true}})})})
 }
+function parseMA(d){
+  var p=d.prices;if(!p||p.length<50)throw 1;var l=p.slice(-200),s=0;for(var i=0;i<l.length;i++)s+=l[i][1];var ma=s/l.length;
+  var wp=p.slice(-52).map(function(x){return{d:new Date(x[0]).toLocaleDateString('en-US',{month:'short',day:'numeric'}),p:Math.round(x[1]),m:Math.round(ma)}});
+  C.set('ma',{ma:ma,wp:wp});return{ma:ma,wp:wp,src:'CoinGecko'};
+}
 function fetchMA(){
   var c=C.get('ma',86400000);if(c&&!c.stale)return Promise.resolve({ma:c.value.ma,wp:c.value.wp,src:'Cached'});
-  return fj('https://api.coingecko.com/api/v3/coins/bitcoin/market_chart?vs_currency=usd&days=1400&interval=weekly',30000).then(function(d){
-    var p=d.prices;if(!p||p.length<50)throw 1;var l=p.slice(-200),s=0;for(var i=0;i<l.length;i++)s+=l[i][1];var ma=s/l.length;
-    var wp=p.slice(-52).map(function(x){return{d:new Date(x[0]).toLocaleDateString('en-US',{month:'short',day:'numeric'}),p:Math.round(x[1]),m:Math.round(ma)}});
-    C.set('ma',{ma:ma,wp:wp});return{ma:ma,wp:wp,src:'CoinGecko'}
+  var url='https://api.coingecko.com/api/v3/coins/bitcoin/market_chart?vs_currency=usd&days=1400&interval=weekly';
+  return fj(url,45000).then(parseMA).catch(function(){
+    // Retry once after 3s
+    return new Promise(function(ok){setTimeout(ok,3000)}).then(function(){return fj(url,45000).then(parseMA)})
   }).catch(function(){var f=C.any('ma');return f?{ma:f.value.ma,wp:f.value.wp,src:'Cached',stale:true,ct:f.ts}:{ma:0,wp:[],src:'N/A',err:true}})
 }
 function fetchFG(){
@@ -117,11 +122,11 @@ function fetchHR(){
 function eMVRV(p,ma){if(!ma||ma<=0)return 0;var r=p/ma;if(r<0.7)return-0.5+(r-0.7)*2;if(r<1)return(r-1)*2.5;if(r<1.5)return(r-1)*3;if(r<2.5)return 1.5+(r-1.5)*2;return 3.5+(r-2.5)*1.5}
 function eRP(p,ma){if(!ma||ma<=0)return 0;var r=p/ma,m;if(r<1)m=1.02;else if(r<1.5)m=1.05+((r-1)*0.1);else if(r<2.5)m=1.1+((r-1.5)*0.08);else m=1.2;return ma*m}
 function cPuell(p){return(450*p)/(450*p*0.85)||1}
-function score(mv,pma,prp,fg,fr,pu,hc){
+function score(mv,pma,prp,fg,fr,pu,hc,maLoaded){
   var s=0,b=[];
-  var mp=mv<0?40:mv<1?30:mv<1.5?20:mv<2.5?10:0;s+=mp;b.push({n:'MVRV Z-Score (Est.)',v:mv.toFixed(2),p:mp,m:40,bg:'EST 92%'});
-  var maPct=pma*100,maP=maPct<=100?30:maPct<=110?20:maPct<=130?10:0;s+=maP;b.push({n:'Price vs 200W MA',v:maPct.toFixed(1)+'%',p:maP,m:30});
-  var rpPct=prp*100,rpP=rpPct<=100?30:rpPct<=110?20:rpPct<=130?10:0;s+=rpP;b.push({n:'Price vs Realized Price (Est.)',v:rpPct.toFixed(1)+'%',p:rpP,m:30,bg:'EST 94%'});
+  var mp=maLoaded?(mv<0?40:mv<1?30:mv<1.5?20:mv<2.5?10:0):0;s+=mp;b.push({n:'MVRV Z-Score (Est.)',v:maLoaded?mv.toFixed(2):'Waiting...',p:mp,m:40,bg:'EST 92%'});
+  var maPct=pma*100,maP=maLoaded?(maPct<=100?30:maPct<=110?20:maPct<=130?10:0):0;s+=maP;b.push({n:'Price vs 200W MA',v:maLoaded?maPct.toFixed(1)+'%':'Waiting...',p:maP,m:30});
+  var rpPct=prp*100,rpP=maLoaded?(rpPct<=100?30:rpPct<=110?20:rpPct<=130?10:0):0;s+=rpP;b.push({n:'Price vs Realized Price (Est.)',v:maLoaded?rpPct.toFixed(1)+'%':'Waiting...',p:rpP,m:30,bg:'EST 94%'});
   var fP=fg<20?10:0;s+=fP;b.push({n:'Fear & Greed Index',v:''+fg,p:fP,m:10});
   var frP=fr<0?10:0;s+=frP;b.push({n:'Funding Rate',v:(fr*100).toFixed(4)+'%',p:frP,m:10});
   var puP=pu<0.5?10:0;s+=puP;b.push({n:'Puell Multiple',v:pu.toFixed(2),p:puP,m:10});
@@ -166,11 +171,12 @@ function render(){
   var p=state.price,ma=state.ma,fg=state.fg,fr=state.fr,hr=state.hr;
   var mvrv=eMVRV(p.price,ma.ma),rp=eRP(p.price,ma.ma),puell=cPuell(p.price);
   var pma=ma.ma>0?p.price/ma.ma:0,prp=rp>0?p.price/rp:0;
-  var res=score(mvrv,pma,prp,fg.val,fr.rate,puell,hr.cap),sc=res.s,bd=res.b,si=sig(sc);
+  var maLoaded=ma.ma>0;
+  var res=score(mvrv,pma,prp,fg.val,fr.rate,puell,hr.cap,maLoaded),sc=res.s,bd=res.b,si=sig(sc);
 
-  var mvSt=mvrv<0?['EXTREME BUY ZONE','#22c55e']:mvrv<1?['Strong buy zone','#22c55e']:mvrv<1.5?['Approaching buy','#eab308']:mvrv<2.5?['Neutral','#94a3b8']:['Overheated','#ef4444'];
-  var maSt=pma*100<=100?['AT/BELOW MA','#22c55e']:pma*100<=110?['Near MA','#22c55e']:pma*100<=130?['Moderate','#eab308']:['Far above MA','#ef4444'];
-  var rpSt=prp*100<=100?['BELOW RP','#22c55e']:prp*100<=110?['Near RP','#22c55e']:prp*100<=130?['Moderate','#eab308']:['Above RP','#ef4444'];
+  var mvSt=!maLoaded?['Loading 200WMA...','#64748b']:mvrv<0?['EXTREME BUY ZONE','#22c55e']:mvrv<1?['Strong buy zone','#22c55e']:mvrv<1.5?['Approaching buy','#eab308']:mvrv<2.5?['Neutral','#94a3b8']:['Overheated','#ef4444'];
+  var maSt=!maLoaded?['Loading...','#64748b']:pma*100<=100?['AT/BELOW MA','#22c55e']:pma*100<=110?['Near MA','#22c55e']:pma*100<=130?['Moderate','#eab308']:['Far above MA','#ef4444'];
+  var rpSt=!maLoaded?['Loading...','#64748b']:prp*100<=100?['BELOW RP','#22c55e']:prp*100<=110?['Near RP','#22c55e']:prp*100<=130?['Moderate','#eab308']:['Above RP','#ef4444'];
   var fgSt=fg.val<20?['EXTREME FEAR','#22c55e']:fg.val<40?['Fear','#eab308']:fg.val<60?['Neutral','#94a3b8']:fg.val<80?['Greed','#f97316']:['Extreme Greed','#ef4444'];
 
   function barColor(pct){return pct>=75?'#22c55e':pct>=50?'#eab308':pct>=25?'#f97316':'#ef4444'}
