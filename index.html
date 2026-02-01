@@ -88,17 +88,29 @@ function fetchPrice(){
       return fj('https://blockchain.info/ticker').then(function(d){var p=d.USD.last;C.set('price',p);return{price:p,src:'Blockchain.info'}}).catch(function(){
         var c=C.any('price');return c?{price:c.value,src:'Cached',stale:true,ct:c.ts}:{price:0,src:'Unavailable',err:true}})})})
 }
-function parseMA(d){
+function parseMAcg(d){
   var p=d.prices;if(!p||p.length<50)throw 1;var l=p.slice(-200),s=0;for(var i=0;i<l.length;i++)s+=l[i][1];var ma=s/l.length;
   var wp=p.slice(-52).map(function(x){return{d:new Date(x[0]).toLocaleDateString('en-US',{month:'short',day:'numeric'}),p:Math.round(x[1]),m:Math.round(ma)}});
   C.set('ma',{ma:ma,wp:wp});return{ma:ma,wp:wp,src:'CoinGecko'};
 }
+function parseMAbin(data){
+  // Binance klines: [[openTime,open,high,low,close,volume,...],...]
+  if(!data||data.length<50)throw 1;
+  var l=data.slice(-200),s=0;for(var i=0;i<l.length;i++)s+=parseFloat(l[i][4]);var ma=s/l.length;
+  var wp=data.slice(-52).map(function(x){return{d:new Date(x[0]).toLocaleDateString('en-US',{month:'short',day:'numeric'}),p:Math.round(parseFloat(x[4])),m:Math.round(ma)}});
+  C.set('ma',{ma:ma,wp:wp});return{ma:ma,wp:wp,src:'Binance'};
+}
 function fetchMA(){
   var c=C.get('ma',86400000);if(c&&!c.stale)return Promise.resolve({ma:c.value.ma,wp:c.value.wp,src:'Cached'});
-  var url='https://api.coingecko.com/api/v3/coins/bitcoin/market_chart?vs_currency=usd&days=1400&interval=weekly';
-  return fj(url,45000).then(parseMA).catch(function(){
-    // Retry once after 3s
-    return new Promise(function(ok){setTimeout(ok,3000)}).then(function(){return fj(url,45000).then(parseMA)})
+  var cgUrl='https://api.coingecko.com/api/v3/coins/bitcoin/market_chart?vs_currency=usd&days=1400&interval=weekly';
+  var bnUrl='https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1w&limit=200';
+  // Try CoinGecko first (has full 1400 days)
+  return fj(cgUrl,45000).then(parseMAcg).catch(function(){
+    // Fallback: Binance weekly klines (200 weeks, no signup needed)
+    return fj(bnUrl,15000).then(parseMAbin);
+  }).catch(function(){
+    // Retry CoinGecko after 5s delay
+    return new Promise(function(ok){setTimeout(ok,5000)}).then(function(){return fj(cgUrl,45000).then(parseMAcg)})
   }).catch(function(){var f=C.any('ma');return f?{ma:f.value.ma,wp:f.value.wp,src:'Cached',stale:true,ct:f.ts}:{ma:0,wp:[],src:'N/A',err:true}})
 }
 function fetchFG(){
@@ -237,7 +249,16 @@ function fetchAll(){
     state.lastUp=Date.now();state.countdown=60;render();
   });
 }
-fetchAll();
+fetchAll().then(function(){
+  // If 200WMA failed to load, retry aggressively every 10s until it works
+  if(!state.ma||state.ma.ma<=0){
+    var maRetry=setInterval(function(){
+      fetchMA().then(function(r){if(r&&r.ma>0){state.ma=r;render();clearInterval(maRetry)}});
+    },10000);
+    // Stop retrying after 2 minutes
+    setTimeout(function(){clearInterval(maRetry)},120000);
+  }
+});
 setInterval(function(){fetchPrice().then(function(p){if(p)state.price=p;render()})},30000);
 setInterval(fetchAll,60000);
 setInterval(function(){state.countdown=Math.max(0,state.countdown-1);var el=document.querySelector('.meta');if(el){var spans=el.querySelectorAll('span');if(spans.length>=5)spans[4].textContent='Next refresh: '+state.countdown+'s'}},1000);
