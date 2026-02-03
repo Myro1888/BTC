@@ -124,10 +124,10 @@ Simply open `index.html` in any modern browser. No server required.
 
 ## Tech Stack
 
-- React 18 (CDN)
-- Recharts (CDN)
-- TailwindCSS (CDN)
-- Pure vanilla JavaScript
+- Pure vanilla JavaScript (ES5 compatible)
+- Embedded CSS (dark theme, responsive grid)
+- SVG-based charts (no external charting library)
+- Zero external dependencies
 - No build step required
 
 ## Disclaimer
