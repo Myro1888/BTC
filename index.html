@@ -124,7 +124,7 @@ function fetchFR(){
 function fetchHR(){
   var c=C.get('hr',3600000);if(c&&!c.stale)return Promise.resolve({ma30:c.value.ma30,ma60:c.value.ma60,cap:c.value.cap,src:'Cached'});
   return fj('https://mempool.space/api/v1/mining/hashrate/1y',20000).then(function(d){
-    if(!d.hashrates||d.hashrates.length<60)throw 1;var h=d.hashrates,l6=h.slice(-60),l3=h.slice(-30),s3=0,s6=0;
+    if(!d.hashrates||d.hashrates.length<60)throw new Error('insufficient hashrate data');var h=d.hashrates,l6=h.slice(-60),l3=h.slice(-30),s3=0,s6=0;
     for(var i=0;i<l3.length;i++)s3+=l3[i].avgHashrate;for(var i=0;i<l6.length;i++)s6+=l6[i].avgHashrate;
     var m3=s3/l3.length,m6=s6/l6.length,r={ma30:m3,ma60:m6,cap:m3<m6};C.set('hr',r);return{ma30:m3,ma60:m6,cap:r.cap,src:'Mempool.space'}
   }).catch(function(){var f=C.any('hr');return f?{ma30:f.value.ma30,ma60:f.value.ma60,cap:f.value.cap,src:'Cached',stale:true,ct:f.ts}:{ma30:0,ma60:0,cap:false,src:'N/A',err:true}})
@@ -133,7 +133,7 @@ function fetchHR(){
 // ═══════ CALC ═══════
 function eMVRV(p,ma){if(!ma||ma<=0)return 0;var r=p/ma;if(r<0.7)return-0.75+(r-0.7)*2;if(r<1)return(r-1)*2.5;if(r<1.5)return(r-1)*3;if(r<2.5)return 1.5+(r-1.5)*2;return 3.5+(r-2.5)*1.5}
 function eRP(p,ma){if(!ma||ma<=0)return 0;var r=p/ma,m;if(r<1)m=1.02;else if(r<1.5)m=1.02+((r-1)*0.16);else if(r<2.5)m=1.1+((r-1.5)*0.08);else m=1.18;return ma*m}
-function cPuell(p,ma){if(!p||p<=0||!ma||ma<=0)return 1;return p/ma}
+function cPuell(p,wp){if(!p||p<=0||!wp||wp.length===0)return 1;var s=0;for(var i=0;i<wp.length;i++)s+=wp[i].p;var avg=s/wp.length;if(avg<=0)return 1;return p/avg}
 function score(mv,pma,prp,fg,fr,pu,hc,maLoaded){
   var s=0,b=[];
   var mp=maLoaded?(mv<0?40:mv<1?30:mv<1.5?20:mv<2.5?10:0):0;s+=mp;b.push({n:'MVRV Z-Score (Est.)',v:maLoaded?mv.toFixed(2):'Waiting...',p:mp,m:40,bg:'EST 92%'});
@@ -181,7 +181,7 @@ var state={price:{price:0,src:''},ma:{ma:0,wp:[]},fg:{val:50,txt:'Neutral'},fr:{
 
 function render(){
   var p=state.price,ma=state.ma,fg=state.fg,fr=state.fr,hr=state.hr;
-  var mvrv=eMVRV(p.price,ma.ma),rp=eRP(p.price,ma.ma),puell=cPuell(p.price,ma.ma);
+  var mvrv=eMVRV(p.price,ma.ma),rp=eRP(p.price,ma.ma),puell=cPuell(p.price,ma.wp);
   var pma=ma.ma>0?p.price/ma.ma:0,prp=rp>0?p.price/rp:0;
   var maLoaded=ma.ma>0;
   var res=score(mvrv,pma,prp,fg.val,fr.rate,puell,hr.cap,maLoaded),sc=res.s,bd=res.b,si=sig(sc);
@@ -224,7 +224,7 @@ function render(){
     var budget=10000,amt=budget*(si.a/100);
     var tr=[{l:'Tranche 1 (Now)',pr:p.price,a:amt*0.4},{l:'Tranche 2 (-5%)',pr:p.price*0.95,a:amt*0.3},{l:'Tranche 3 (-10%)',pr:p.price*0.90,a:amt*0.3}];
     html+='<div class="two-col"><div class="card"><div class="section-title">Ladder Strategy ('+si.a+'% Allocation)</div><div class="desc">Example with $'+budget.toLocaleString()+' portfolio = $'+amt.toLocaleString()+' to deploy</div>';
-    for(var i=0;i<tr.length;i++){html+='<div class="ladder-row"><div><div style="font-size:11px;font-weight:bold;color:#cbd5e1">'+tr[i].l+'</div><div style="font-size:9px;color:#64748b">@ '+fp(tr[i].pr)+'</div></div><div style="text-align:right"><div style="font-size:11px;font-weight:bold;color:#22c55e">$'+tr[i].a.toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0})+'</div><div style="font-size:9px;color:#64748b">'+(tr[i].a/tr[i].pr).toFixed(6)+' BTC</div></div></div>'}
+    for(var i=0;i<tr.length;i++){var btcAmt=tr[i].pr>0?(tr[i].a/tr[i].pr).toFixed(6):'--';html+='<div class="ladder-row"><div><div style="font-size:11px;font-weight:bold;color:#cbd5e1">'+tr[i].l+'</div><div style="font-size:9px;color:#64748b">@ '+fp(tr[i].pr)+'</div></div><div style="text-align:right"><div style="font-size:11px;font-weight:bold;color:#22c55e">$'+tr[i].a.toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0})+'</div><div style="font-size:9px;color:#64748b">'+btcAmt+' BTC</div></div></div>'}
     html+='</div>';
   } else { html+='<div class="two-col"><div class="card"><div class="section-title">Ladder Strategy</div><div style="text-align:center;color:#64748b;padding:20px">No allocation at current signal level</div></div>'; }
   html+='<div class="card"><div class="section-title">Historical Performance (Score &gt; 110)</div>';
