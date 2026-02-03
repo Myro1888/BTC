@@ -11,11 +11,11 @@ Deploy to GitHub Pages or open `index.html` directly in your browser.
 - **8 indicators** with a 140-point scoring system
 - **Real-time price** from Binance with 30-second refresh
 - **200-Week Moving Average** calculated from CoinGecko historical data
-- **Estimated MVRV Z-Score** (92% accuracy vs actual on-chain data)
-- **Estimated Realized Price** (94% accuracy vs actual on-chain data)
+- **Estimated MVRV Z-Score** (directionally accurate at cycle bottoms)
+- **Estimated Realized Price** (closest to actual during bear markets)
 - **Fear & Greed Index** from Alternative.me
 - **Funding Rates** from Binance Futures
-- **Puell Multiple** calculated from block subsidy
+- **Puell Multiple** estimated from 52-week price average
 - **Hash Ribbons** from Mempool.space hashrate data
 - **52-week price chart** with 200WMA overlay
 - **Ladder strategy** with 3-tranche entry plan
@@ -63,21 +63,25 @@ Deploy to GitHub Pages or open `index.html` directly in your browser.
 
 ## Accuracy Disclaimers
 
-### MVRV Z-Score (Estimated - 92% Accurate)
+### MVRV Z-Score (Estimated)
 
-Since real MVRV requires on-chain data from paid APIs (Glassnode), this dashboard uses an enhanced estimation model based on the Price/200WMA ratio. The model has been validated against all historical cycle bottoms:
+Since real MVRV requires on-chain data from paid APIs (Glassnode), this dashboard uses a piecewise linear estimation model based on the Price/200WMA ratio. The model maps this ratio to approximate Z-Score values and correctly identifies all historical cycle bottoms as negative Z-Scores (strong buy zones):
 
-- **Nov 2022**: Estimated -0.3 vs Actual -0.28 (within 7%)
-- **Dec 2018**: Estimated -0.5 vs Actual -0.51 (within 2%)
-- **Mar 2020**: Estimated -0.1 vs Actual 0.0 (within 4%)
+- **Nov 2022**: Price/MA ≈ 0.64 → Estimated Z ≈ -0.87 (Actual: -0.28)
+- **Dec 2018**: Price/MA ≈ 0.58 → Estimated Z ≈ -0.99 (Actual: -0.51)
+- **Mar 2020**: Price/MA ≈ 0.77 → Estimated Z ≈ -0.58 (Actual: 0.0)
 
-### Realized Price (Estimated - 94% Accurate)
+Note: The estimation amplifies the magnitude vs actual MVRV but correctly identifies the direction (negative = buy zone) at all historical bottoms. For precise values, use Glassnode.
 
-Realized Price is estimated using the 200WMA as a base with a dynamic multiplier. Validated against historical data:
+### Realized Price (Estimated)
 
-- **Nov 2022**: Estimated ~$18,100 vs Actual $17,600 (within 3%)
-- **Dec 2018**: Estimated ~$5,500 vs Actual $5,800 (within 5%)
-- **Mar 2020**: Estimated ~$6,100 vs Actual $6,200 (within 2%)
+Realized Price is estimated using the 200WMA as a base with a dynamic multiplier (1.02x to 1.18x depending on how far price is above the MA). Example estimates at historical bottoms:
+
+- **Nov 2022**: 200WMA ≈ $25k × 1.02 = ~$25,500 (Actual RP: $17,600)
+- **Dec 2018**: 200WMA ≈ $5.5k × 1.02 = ~$5,610 (Actual RP: $5,800)
+- **Mar 2020**: 200WMA ≈ $6.5k × 1.02 = ~$6,630 (Actual RP: $6,200)
+
+Note: The estimate is most accurate during bear markets when price is near or below the 200WMA. During deep bear markets (when price < MA), the multiplier is 1.02x. For precise values, use Glassnode.
 
 ## Historical Validation
 

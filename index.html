@@ -80,12 +80,14 @@ get:function(k,m){m=m||3600000;if(this.s[k]&&(Date.now()-this.s[k].ts)<m)return 
 any:function(k){if(this.s[k])return this.s[k];try{var x=localStorage.getItem('b_'+k);if(x){var p=JSON.parse(x);this.s[k]=p;return{value:p.value,ts:p.ts,stale:true}}}catch(e){}return null}
 };
 
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
+
 function fj(url,t){t=t||10000;return new Promise(function(ok,fail){var d=false,tm=setTimeout(function(){d=true;fail(new Error('timeout'))},t);fetch(url).then(function(r){clearTimeout(tm);if(d)return;if(!r.ok)throw new Error(r.status);return r.json()}).then(function(x){if(!d)ok(x)}).catch(function(e){clearTimeout(tm);if(!d)fail(e)})})}
 
 function fetchPrice(){
   return fj('https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT').then(function(d){var p=parseFloat(d.price);if(p>0){C.set('price',p);return{price:p,src:'Binance'}}throw new Error('invalid price')}).catch(function(){
-    return fj('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd').then(function(d){var p=d.bitcoin.usd;C.set('price',p);return{price:p,src:'CoinGecko'}}).catch(function(){
-      return fj('https://blockchain.info/ticker').then(function(d){var p=d.USD.last;C.set('price',p);return{price:p,src:'Blockchain.info'}}).catch(function(){
+    return fj('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd').then(function(d){var p=parseFloat(d.bitcoin.usd);if(!(p>0))throw new Error('invalid price');C.set('price',p);return{price:p,src:'CoinGecko'}}).catch(function(){
+      return fj('https://blockchain.info/ticker').then(function(d){var p=parseFloat(d.USD.last);if(!(p>0))throw new Error('invalid price');C.set('price',p);return{price:p,src:'Blockchain.info'}}).catch(function(){
         var c=C.any('price');return c?{price:c.value,src:'Cached',stale:true,ct:c.ts}:{price:0,src:'Unavailable',err:true}})})})
 }
 function parseMAcg(d){
@@ -115,7 +117,7 @@ function fetchMA(){
 }
 function fetchFG(){
   var c=C.get('fg',86400000);if(c&&!c.stale)return Promise.resolve({val:c.value.val,txt:c.value.txt,src:'Cached'});
-  return fj('https://api.alternative.me/fng/?limit=1').then(function(d){var v={val:parseInt(d.data[0].value),txt:d.data[0].value_classification};C.set('fg',v);return{val:v.val,txt:v.txt,src:'Alternative.me'}}).catch(function(){var f=C.any('fg');return f?{val:f.value.val,txt:f.value.txt,src:'Cached',stale:true,ct:f.ts}:{val:50,txt:'Neutral',src:'N/A',err:true}})
+  return fj('https://api.alternative.me/fng/?limit=1').then(function(d){var v={val:parseInt(d.data[0].value,10),txt:d.data[0].value_classification};C.set('fg',v);return{val:v.val,txt:v.txt,src:'Alternative.me'}}).catch(function(){var f=C.any('fg');return f?{val:f.value.val,txt:f.value.txt,src:'Cached',stale:true,ct:f.ts}:{val:50,txt:'Neutral',src:'N/A',err:true}})
 }
 function fetchFR(){
   var c=C.get('fr',300000);if(c&&!c.stale)return Promise.resolve({rate:c.value,src:'Cached'});
@@ -207,7 +209,7 @@ function render(){
   html+=cardHTML('MVRV Z-Score',mvrv.toFixed(2),bd[0].p,40,mvSt[0],mvSt[1],'EST 92%','Price/MA200W: '+pma.toFixed(3));
   html+=cardHTML('200-Week MA',fp(ma.ma),bd[1].p,30,maSt[0],maSt[1],'','Price is '+(pma*100).toFixed(1)+'% of 200WMA');
   html+=cardHTML('Realized Price',fp(rp),bd[2].p,30,rpSt[0],rpSt[1],'EST 94%','Price is '+(prp*100).toFixed(1)+'% of RP');
-  html+=cardHTML('Fear & Greed',fg.val+' - '+fg.txt,bd[3].p,10,fgSt[0],fgSt[1],'','< 20 = Extreme Fear (Buy Signal)');
+  html+=cardHTML('Fear & Greed',fg.val+' - '+esc(fg.txt),bd[3].p,10,fgSt[0],fgSt[1],'','< 20 = Extreme Fear (Buy Signal)');
   html+=cardHTML('Funding Rate',(fr.rate*100).toFixed(4)+'%',bd[4].p,10,fr.rate<0?'Negative (Buy)':'Positive',fr.rate<0?'#22c55e':'#94a3b8','','Negative = shorts paying longs');
   html+=cardHTML('Puell Multiple',puell.toFixed(2),bd[5].p,10,puell<0.5?'Miner Stress':'Normal',puell<0.5?'#22c55e':'#94a3b8','','< 0.5 = extreme miner stress');
   html+=cardHTML('Hash Ribbons',hr.cap?'CAPITULATION':'Recovery',bd[6].p,10,hr.cap?'Miner Capitulation':'Healthy',hr.cap?'#22c55e':'#94a3b8','','30MA '+(hr.cap?'<':'>')+' 60MA');
