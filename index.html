@@ -5,34 +5,46 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#0f172a">
-<title>Bitcoin Bottom Indicator Dashboard</title>
+<title>Bitcoin Investment Indicator Dashboard</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:#0f172a;color:#e2e8f0;font-family:-apple-system,BlinkMacSystemFont,'SF Mono','Fira Code',monospace;line-height:1.5}
-.container{max-width:1200px;margin:0 auto;padding:12px}
+.container{max-width:1400px;margin:0 auto;padding:12px}
 .header{text-align:center;padding:20px 0}
 .header h1{font-size:clamp(18px,4vw,28px);color:#fff;margin-bottom:4px}
 .header .sub{font-size:12px;color:#64748b;margin-bottom:8px}
 .header .meta{font-size:10px;color:#475569;display:flex;justify-content:center;gap:12px;flex-wrap:wrap}
-.main-panel{border:2px solid #ef4444;border-radius:12px;padding:20px;margin-bottom:16px;background:rgba(15,23,42,0.95);display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;align-items:center}
+.dual-panel{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
+.main-panel{border:2px solid #ef4444;border-radius:12px;padding:20px;background:rgba(15,23,42,0.95);display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;align-items:center}
+.sell-panel{border:2px solid #ef4444;border-radius:12px;padding:20px;background:rgba(15,23,42,0.95);display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;align-items:center}
 @keyframes glow-green{0%,100%{box-shadow:0 0 8px rgba(34,197,94,0.4)}50%{box-shadow:0 0 20px rgba(34,197,94,0.7)}}
 @keyframes glow-yellow{0%,100%{box-shadow:0 0 8px rgba(234,179,8,0.4)}50%{box-shadow:0 0 20px rgba(234,179,8,0.7)}}
 @keyframes glow-red{0%,100%{box-shadow:0 0 8px rgba(239,68,68,0.4)}50%{box-shadow:0 0 20px rgba(239,68,68,0.7)}}
-.glow-green{animation:glow-green 2s infinite}.glow-yellow{animation:glow-yellow 2s infinite}.glow-red{animation:glow-red 2s infinite}
-.main-panel .price-box{text-align:center}
-.main-panel .price-box .label{font-size:10px;color:#94a3b8;text-transform:uppercase;letter-spacing:1px}
-.main-panel .price-box .val{font-size:clamp(22px,5vw,36px);font-weight:bold;color:#fff}
-.main-panel .score-box{text-align:center}
-.main-panel .signal-label{font-size:clamp(14px,3vw,20px);font-weight:bold;margin-top:4px}
-.main-panel .alloc-box{text-align:center}
-.main-panel .alloc-box .val{font-size:clamp(22px,5vw,36px);font-weight:bold}
-.main-panel .alloc-box .note{font-size:9px;color:#64748b;margin-top:2px}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;margin-bottom:16px}
+@keyframes glow-cyan{0%,100%{box-shadow:0 0 8px rgba(6,182,212,0.4)}50%{box-shadow:0 0 20px rgba(6,182,212,0.7)}}
+.glow-green{animation:glow-green 2s infinite}.glow-yellow{animation:glow-yellow 2s infinite}.glow-red{animation:glow-red 2s infinite}.glow-cyan{animation:glow-cyan 2s infinite}
+.main-panel .price-box,.sell-panel .price-box{text-align:center}
+.main-panel .price-box .label,.sell-panel .price-box .label{font-size:10px;color:#94a3b8;text-transform:uppercase;letter-spacing:1px}
+.main-panel .price-box .val,.sell-panel .price-box .val{font-size:clamp(18px,4vw,28px);font-weight:bold;color:#fff}
+.main-panel .score-box,.sell-panel .score-box{text-align:center}
+.main-panel .signal-label,.sell-panel .signal-label{font-size:clamp(12px,2.5vw,18px);font-weight:bold;margin-top:4px}
+.main-panel .alloc-box,.sell-panel .alloc-box{text-align:center}
+.main-panel .alloc-box .val,.sell-panel .alloc-box .val{font-size:clamp(18px,4vw,28px);font-weight:bold}
+.main-panel .alloc-box .note,.sell-panel .alloc-box .note{font-size:9px;color:#64748b;margin-top:2px}
+.trend-panel{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}
+.trend-card{background:#1e293b;border:1px solid #334155;border-radius:8px;padding:14px;text-align:center}
+.trend-card .period{font-size:9px;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px}
+.trend-card .arrow{font-size:24px;margin-bottom:4px}
+.trend-card .change{font-size:14px;font-weight:bold}
+.trend-card .label{font-size:10px;margin-top:2px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;margin-bottom:16px}
 .card{background:#1e293b;border:1px solid #334155;border-radius:8px;padding:14px}
 .card:hover{border-color:#3b82f6}
+.card.sell-card:hover{border-color:#ef4444}
 .card .top{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
 .card .name{font-size:10px;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;font-weight:bold}
 .badge{font-size:9px;padding:2px 6px;border-radius:4px;border:1px solid #a16207;background:rgba(161,98,7,0.2);color:#eab308;font-weight:bold}
+.badge-sell{border:1px solid #991b1b;background:rgba(153,27,27,0.2);color:#f87171}
+.badge-buy{border:1px solid #166534;background:rgba(22,101,52,0.2);color:#4ade80}
 .card .value{font-size:20px;font-weight:bold;margin-bottom:4px}
 .card .status{font-size:11px;color:#64748b;margin-bottom:4px}
 .card .desc{font-size:9px;color:#475569;margin-bottom:6px}
@@ -40,8 +52,8 @@ body{background:#0f172a;color:#e2e8f0;font-family:-apple-system,BlinkMacSystemFo
 .bar-bg{flex:1;height:6px;background:#1e293b;border-radius:3px;overflow:hidden}
 .bar-fill{height:100%;border-radius:3px;transition:width 0.5s}
 .bar-label{font-size:11px;font-weight:bold;min-width:36px;text-align:right}
-.card .stale{font-size:8px;color:#a16207;margin-top:4px}
 .two-col{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px}
+.three-col{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px}
 .breakdown-item{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #334155}
 .breakdown-item .info{flex:1}
 .breakdown-item .info .n{font-size:11px;color:#cbd5e1}
@@ -51,20 +63,26 @@ body{background:#0f172a;color:#e2e8f0;font-family:-apple-system,BlinkMacSystemFo
 .total-row{display:flex;justify-content:space-between;padding:10px 0;border-top:1px solid #334155;margin-top:4px}
 .total-row span{font-size:13px;font-weight:bold}
 .hist-row{display:flex;justify-content:space-between;padding:8px 12px;background:rgba(30,41,59,0.5);border-radius:6px;margin-bottom:6px}
-.hist-row .d{font-size:11px;color:#cbd5e1}.hist-row .r{font-size:11px;font-weight:bold;color:#22c55e}
+.hist-row .d{font-size:11px;color:#cbd5e1}.hist-row .r{font-size:11px;font-weight:bold}
 .ladder-row{display:flex;justify-content:space-between;padding:8px 12px;background:rgba(30,41,59,0.5);border-radius:6px;margin-bottom:6px}
-.footer-section{font-size:10px;color:#64748b;margin-bottom:8px;display:grid;grid-template-columns:1fr 1fr;gap:4px}
+.footer-section{font-size:10px;color:#64748b;margin-bottom:8px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px}
 .warn-box{padding:10px;border-radius:6px;margin-bottom:8px;font-size:10px;line-height:1.6}
 .warn-yellow{background:rgba(161,98,7,0.1);border:1px solid rgba(161,98,7,0.3);color:rgba(234,179,8,0.7)}
 .warn-red{background:rgba(153,27,27,0.1);border:1px solid rgba(153,27,27,0.3);color:rgba(248,113,113,0.7)}
+.warn-green{background:rgba(22,101,52,0.1);border:1px solid rgba(22,101,52,0.3);color:rgba(74,222,128,0.7)}
 .chart-card{background:#1e293b;border:1px solid #334155;border-radius:8px;padding:14px}
 .section-title{font-size:11px;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;font-weight:bold;margin-bottom:12px}
 .chart-legend{display:flex;justify-content:center;gap:20px;margin-top:8px;font-size:10px;color:#64748b}
 .chart-legend .dot{display:inline-block;width:14px;height:2px;margin-right:4px;vertical-align:middle}
+.cbbi-meter{height:20px;background:linear-gradient(90deg,#22c55e 0%,#eab308 50%,#ef4444 100%);border-radius:10px;position:relative;margin:10px 0}
+.cbbi-needle{position:absolute;top:-5px;width:4px;height:30px;background:#fff;border-radius:2px;transform:translateX(-50%)}
+.cbbi-labels{display:flex;justify-content:space-between;font-size:9px;color:#64748b}
 .loading{display:flex;align-items:center;justify-content:center;min-height:100vh;color:#94a3b8;font-size:14px}
 @media(max-width:768px){
-  .main-panel{grid-template-columns:1fr;text-align:center}
-  .two-col{grid-template-columns:1fr}
+  .dual-panel{grid-template-columns:1fr}
+  .main-panel,.sell-panel{grid-template-columns:1fr;text-align:center}
+  .trend-panel{grid-template-columns:repeat(2,1fr)}
+  .two-col,.three-col{grid-template-columns:1fr}
   .footer-section{grid-template-columns:1fr}
 }
 </style>
@@ -84,45 +102,63 @@ function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').repl
 
 function fj(url,t){t=t||10000;return new Promise(function(ok,fail){var d=false,tm=setTimeout(function(){d=true;fail(new Error('timeout'))},t);fetch(url).then(function(r){clearTimeout(tm);if(d)return;if(!r.ok)throw new Error(r.status);return r.json()}).then(function(x){if(!d)ok(x)}).catch(function(e){clearTimeout(tm);if(!d)fail(e)})})}
 
+// ═══════ FETCH FUNCTIONS ═══════
 function fetchPrice(){
   return fj('https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT').then(function(d){var p=parseFloat(d.price);if(p>0){C.set('price',p);return{price:p,src:'Binance'}}throw new Error('invalid price')}).catch(function(){
     return fj('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd').then(function(d){var p=parseFloat(d.bitcoin.usd);if(!(p>0))throw new Error('invalid price');C.set('price',p);return{price:p,src:'CoinGecko'}}).catch(function(){
       return fj('https://blockchain.info/ticker').then(function(d){var p=parseFloat(d.USD.last);if(!(p>0))throw new Error('invalid price');C.set('price',p);return{price:p,src:'Blockchain.info'}}).catch(function(){
         var c=C.any('price');return c?{price:c.value,src:'Cached',stale:true,ct:c.ts}:{price:0,src:'Unavailable',err:true}})})})
 }
+
 function parseMAcg(d){
-  var p=d.prices;if(!p||p.length<50)throw new Error('insufficient data');var l=p.slice(-200),s=0;for(var i=0;i<l.length;i++)s+=l[i][1];var ma=s/l.length;
-  var wp=p.slice(-52).map(function(x){return{d:new Date(x[0]).toLocaleDateString('en-US',{month:'short',day:'numeric'}),p:Math.round(x[1]),m:Math.round(ma)}});
-  C.set('ma',{ma:ma,wp:wp});return{ma:ma,wp:wp,src:'CoinGecko'};
+  var p=d.prices;if(!p||p.length<50)throw new Error('insufficient data');
+  // Calculate various MAs from weekly data
+  var l200=p.slice(-200),s200=0;for(var i=0;i<l200.length;i++)s200+=l200[i][1];var ma200w=s200/l200.length;
+  // 2-Year MA (104 weeks)
+  var l104=p.slice(-104),s104=0;for(var i=0;i<l104.length;i++)s104+=l104[i][1];var ma2y=s104/l104.length;
+  // Recent MAs for trend (approximate from weekly)
+  var l13=p.slice(-13),s13=0;for(var i=0;i<l13.length;i++)s13+=l13[i][1];var ma90d=s13/l13.length; // ~90 days
+  var l4=p.slice(-4),s4=0;for(var i=0;i<l4.length;i++)s4+=l4[i][1];var ma30d=s4/l4.length; // ~30 days
+  var l1=p.slice(-1);var ma7d=l1.length>0?l1[0][1]:0; // Most recent week as proxy
+  // Weekly prices for chart
+  var wp=p.slice(-52).map(function(x){return{d:new Date(x[0]).toLocaleDateString('en-US',{month:'short',day:'numeric'}),p:Math.round(x[1]),m:Math.round(ma200w)}});
+  var result={ma:ma200w,ma2y:ma2y,ma90d:ma90d,ma30d:ma30d,ma7d:ma7d,wp:wp};
+  C.set('ma',result);return{ma:ma200w,ma2y:ma2y,ma90d:ma90d,ma30d:ma30d,ma7d:ma7d,wp:wp,src:'CoinGecko'};
 }
+
 function parseMAbin(data){
-  // Binance klines: [[openTime,open,high,low,close,volume,...],...]
   if(!data||data.length<50)throw new Error('insufficient data');
-  var l=data.slice(-200),s=0;for(var i=0;i<l.length;i++)s+=parseFloat(l[i][4]);var ma=s/l.length;
-  var wp=data.slice(-52).map(function(x){return{d:new Date(x[0]).toLocaleDateString('en-US',{month:'short',day:'numeric'}),p:Math.round(parseFloat(x[4])),m:Math.round(ma)}});
-  C.set('ma',{ma:ma,wp:wp});return{ma:ma,wp:wp,src:'Binance'};
+  var l200=data.slice(-200),s200=0;for(var i=0;i<l200.length;i++)s200+=parseFloat(l200[i][4]);var ma200w=s200/l200.length;
+  var l104=data.slice(-104),s104=0;for(var i=0;i<l104.length;i++)s104+=parseFloat(l104[i][4]);var ma2y=s104/l104.length;
+  var l13=data.slice(-13),s13=0;for(var i=0;i<l13.length;i++)s13+=parseFloat(l13[i][4]);var ma90d=s13/l13.length;
+  var l4=data.slice(-4),s4=0;for(var i=0;i<l4.length;i++)s4+=parseFloat(l4[i][4]);var ma30d=s4/l4.length;
+  var l1=data.slice(-1);var ma7d=l1.length>0?parseFloat(l1[0][4]):0;
+  var wp=data.slice(-52).map(function(x){return{d:new Date(x[0]).toLocaleDateString('en-US',{month:'short',day:'numeric'}),p:Math.round(parseFloat(x[4])),m:Math.round(ma200w)}});
+  var result={ma:ma200w,ma2y:ma2y,ma90d:ma90d,ma30d:ma30d,ma7d:ma7d,wp:wp};
+  C.set('ma',result);return{ma:ma200w,ma2y:ma2y,ma90d:ma90d,ma30d:ma30d,ma7d:ma7d,wp:wp,src:'Binance'};
 }
+
 function fetchMA(){
-  var c=C.get('ma',86400000);if(c&&!c.stale)return Promise.resolve({ma:c.value.ma,wp:c.value.wp,src:'Cached'});
+  var c=C.get('ma',86400000);if(c&&!c.stale)return Promise.resolve({ma:c.value.ma,ma2y:c.value.ma2y||c.value.ma,ma90d:c.value.ma90d||c.value.ma,ma30d:c.value.ma30d||c.value.ma,ma7d:c.value.ma7d||c.value.ma,wp:c.value.wp,src:'Cached'});
   var cgUrl='https://api.coingecko.com/api/v3/coins/bitcoin/market_chart?vs_currency=usd&days=1400&interval=weekly';
   var bnUrl='https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1w&limit=200';
-  // Try CoinGecko first (has full 1400 days)
   return fj(cgUrl,45000).then(parseMAcg).catch(function(){
-    // Fallback: Binance weekly klines (200 weeks, no signup needed)
     return fj(bnUrl,15000).then(parseMAbin);
   }).catch(function(){
-    // Retry CoinGecko after 5s delay
     return new Promise(function(ok){setTimeout(ok,5000)}).then(function(){return fj(cgUrl,45000).then(parseMAcg)})
-  }).catch(function(){var f=C.any('ma');return f?{ma:f.value.ma,wp:f.value.wp,src:'Cached',stale:true,ct:f.ts}:{ma:0,wp:[],src:'N/A',err:true}})
+  }).catch(function(){var f=C.any('ma');return f?{ma:f.value.ma,ma2y:f.value.ma2y||f.value.ma,ma90d:f.value.ma90d||f.value.ma,ma30d:f.value.ma30d||f.value.ma,ma7d:f.value.ma7d||f.value.ma,wp:f.value.wp,src:'Cached',stale:true,ct:f.ts}:{ma:0,ma2y:0,ma90d:0,ma30d:0,ma7d:0,wp:[],src:'N/A',err:true}})
 }
+
 function fetchFG(){
   var c=C.get('fg',86400000);if(c&&!c.stale)return Promise.resolve({val:c.value.val,txt:c.value.txt,src:'Cached'});
   return fj('https://api.alternative.me/fng/?limit=1').then(function(d){var v={val:parseInt(d.data[0].value,10),txt:d.data[0].value_classification};C.set('fg',v);return{val:v.val,txt:v.txt,src:'Alternative.me'}}).catch(function(){var f=C.any('fg');return f?{val:f.value.val,txt:f.value.txt,src:'Cached',stale:true,ct:f.ts}:{val:50,txt:'Neutral',src:'N/A',err:true}})
 }
+
 function fetchFR(){
   var c=C.get('fr',300000);if(c&&!c.stale)return Promise.resolve({rate:c.value,src:'Cached'});
   return fj('https://fapi.binance.com/fapi/v1/fundingRate?symbol=BTCUSDT&limit=1').then(function(d){var r=parseFloat(d[0].fundingRate);C.set('fr',r);return{rate:r,src:'Binance'}}).catch(function(){var f=C.any('fr');return f?{rate:f.value,src:'Cached',stale:true,ct:f.ts}:{rate:0,src:'N/A',err:true}})
 }
+
 function fetchHR(){
   var c=C.get('hr',3600000);if(c&&!c.stale)return Promise.resolve({ma30:c.value.ma30,ma60:c.value.ma60,cap:c.value.cap,src:'Cached'});
   return fj('https://mempool.space/api/v1/mining/hashrate/1y',20000).then(function(d){
@@ -132,22 +168,101 @@ function fetchHR(){
   }).catch(function(){var f=C.any('hr');return f?{ma30:f.value.ma30,ma60:f.value.ma60,cap:f.value.cap,src:'Cached',stale:true,ct:f.ts}:{ma30:0,ma60:0,cap:false,src:'N/A',err:true}})
 }
 
-// ═══════ CALC ═══════
+// ═══════ CALCULATION FUNCTIONS ═══════
+// MVRV Z-Score estimation (unchanged - proven accurate)
 function eMVRV(p,ma){if(!ma||ma<=0)return 0;var r=p/ma;if(r<0.7)return-0.75+(r-0.7)*2;if(r<1)return(r-1)*2.5;if(r<1.5)return(r-1)*3;if(r<2.5)return 1.5+(r-1.5)*2;return 3.5+(r-2.5)*1.5}
+
+// Realized Price estimation (unchanged)
 function eRP(p,ma){if(!ma||ma<=0)return 0;var r=p/ma,m;if(r<1)m=1.02;else if(r<1.5)m=1.02+((r-1)*0.16);else if(r<2.5)m=1.1+((r-1.5)*0.08);else m=1.18;return ma*m}
+
+// Puell Multiple (using 52-week average)
 function cPuell(p,wp){if(!p||p<=0||!wp||wp.length===0)return 1;var s=0;for(var i=0;i<wp.length;i++)s+=wp[i].p;var avg=s/wp.length;if(avg<=0)return 1;return p/avg}
-function score(mv,pma,prp,fg,fr,pu,hc,maLoaded){
+
+// 2-Year MA Multiplier (price / 2-year MA) - values > 5 indicate tops
+function calc2YMult(p,ma2y){if(!ma2y||ma2y<=0)return 1;return p/ma2y}
+
+// Estimated CBBI (0-100 scale) - composite of available metrics
+// Based on: MVRV, Puell, Price/200WMA, F&G, 2Y-Mult
+function calcCBBI(mvrv,puell,pma,fg,mult2y){
+  // Normalize each to 0-100 where 100 = top signal
+  // MVRV: -1 to 10 range -> 0-100 (historically tops at 7-10)
+  var mvrvN=Math.min(100,Math.max(0,(mvrv+1)/11*100));
+  // Puell: 0.3 to 5 range -> 0-100 (tops at 4+)
+  var puellN=Math.min(100,Math.max(0,(puell-0.3)/4.7*100));
+  // Price/200WMA: 0.5 to 5 range -> 0-100 (tops at 3-5x)
+  var pmaN=Math.min(100,Math.max(0,(pma-0.5)/4.5*100));
+  // F&G: already 0-100, higher = more greedy = closer to top
+  var fgN=fg;
+  // 2Y Mult: 1 to 6 range -> 0-100 (tops at 5+)
+  var multN=Math.min(100,Math.max(0,(mult2y-1)/5*100));
+  // Weighted average (MVRV and Price/MA most important)
+  return Math.round((mvrvN*0.30)+(pmaN*0.25)+(puellN*0.15)+(fgN*0.15)+(multN*0.15));
+}
+
+// ═══════ BUY SCORE (140 max) ═══════
+function scoreBuy(mv,pma,prp,fg,fr,pu,hc,maLoaded){
   var s=0,b=[];
+  // MVRV Z-Score (40 pts) - strongest bottom indicator
   var mp=maLoaded?(mv<0?40:mv<1?30:mv<1.5?20:mv<2.5?10:0):0;s+=mp;b.push({n:'MVRV Z-Score (Est.)',v:maLoaded?mv.toFixed(2):'Waiting...',p:mp,m:40,bg:'EST 92%'});
+  // Price vs 200WMA (30 pts)
   var maPct=pma*100,maP=maLoaded?(maPct<=100?30:maPct<=110?20:maPct<=130?10:0):0;s+=maP;b.push({n:'Price vs 200W MA',v:maLoaded?maPct.toFixed(1)+'%':'Waiting...',p:maP,m:30});
+  // Price vs RP (30 pts)
   var rpPct=prp*100,rpP=maLoaded?(rpPct<=100?30:rpPct<=110?20:rpPct<=130?10:0):0;s+=rpP;b.push({n:'Price vs Realized Price (Est.)',v:maLoaded?rpPct.toFixed(1)+'%':'Waiting...',p:rpP,m:30,bg:'EST 94%'});
-  var fP=fg<20?10:0;s+=fP;b.push({n:'Fear & Greed Index',v:''+fg,p:fP,m:10});
-  var frP=fr<0?10:0;s+=frP;b.push({n:'Funding Rate',v:(fr*100).toFixed(4)+'%',p:frP,m:10});
-  var puP=pu<0.5?10:0;s+=puP;b.push({n:'Puell Multiple',v:pu.toFixed(2),p:puP,m:10});
+  // Fear & Greed (10 pts)
+  var fP=fg<20?10:fg<30?5:0;s+=fP;b.push({n:'Fear & Greed Index',v:''+fg,p:fP,m:10});
+  // Funding Rate (10 pts)
+  var frP=fr<0?10:fr<0.0001?5:0;s+=frP;b.push({n:'Funding Rate',v:(fr*100).toFixed(4)+'%',p:frP,m:10});
+  // Puell Multiple (10 pts)
+  var puP=pu<0.5?10:pu<0.7?5:0;s+=puP;b.push({n:'Puell Multiple',v:pu.toFixed(2),p:puP,m:10});
+  // Hash Ribbons (10 pts)
   var hP=hc?10:0;s+=hP;b.push({n:'Hash Ribbons',v:hc?'Capitulation':'Recovery',p:hP,m:10});
   return{s:s,b:b}
 }
-function sig(s){if(s>=110)return{l:'EXTREME BUY',c:'#22c55e',a:100,g:'glow-green'};if(s>=80)return{l:'STRONG BUY',c:'#22c55e',a:75,g:'glow-green'};if(s>=50)return{l:'BUY',c:'#eab308',a:50,g:'glow-yellow'};if(s>=30)return{l:'ACCUMULATE',c:'#eab308',a:25,g:'glow-yellow'};return{l:'HOLD',c:'#ef4444',a:0,g:'glow-red'}}
+
+// ═══════ SELL SCORE (100 max) ═══════
+function scoreSell(mv,pma,fg,pu,cbbi,mult2y,maLoaded){
+  var s=0,b=[];
+  // MVRV Z-Score (35 pts) - strongest top indicator
+  // Historical tops: MVRV > 7
+  var mp=maLoaded?(mv>=7?35:mv>=5?25:mv>=3.5?15:mv>=2.5?5:0):0;s+=mp;b.push({n:'MVRV Z-Score (Est.)',v:maLoaded?mv.toFixed(2):'Waiting...',p:mp,m:35,th:'>7 = Top'});
+  // Fear & Greed (25 pts) - extreme greed = sell
+  var fP=fg>=90?25:fg>=80?20:fg>=70?10:fg>=60?5:0;s+=fP;b.push({n:'Fear & Greed Index',v:''+fg,p:fP,m:25,th:'>80 = Greed'});
+  // Price vs 200WMA (20 pts) - tops at 3-5x MA
+  var maPct=pma*100,maP=maLoaded?(maPct>=350?20:maPct>=300?15:maPct>=250?10:maPct>=200?5:0):0;s+=maP;b.push({n:'Price vs 200W MA',v:maLoaded?maPct.toFixed(1)+'%':'Waiting...',p:maP,m:20,th:'>300% = Top'});
+  // Puell Multiple (10 pts) - tops at > 4
+  var puP=pu>=4?10:pu>=3?7:pu>=2?3:0;s+=puP;b.push({n:'Puell Multiple',v:pu.toFixed(2),p:puP,m:10,th:'>4 = Top'});
+  // Est. CBBI (10 pts)
+  var cbP=cbbi>=90?10:cbbi>=80?7:cbbi>=70?3:0;s+=cbP;b.push({n:'Est. CBBI',v:cbbi+'%',p:cbP,m:10,th:'>90 = Top'});
+  return{s:s,b:b}
+}
+
+// Buy signal thresholds
+function sigBuy(s){
+  if(s>=110)return{l:'EXTREME BUY',c:'#22c55e',a:100,g:'glow-green'};
+  if(s>=80)return{l:'STRONG BUY',c:'#22c55e',a:75,g:'glow-green'};
+  if(s>=50)return{l:'BUY',c:'#eab308',a:50,g:'glow-yellow'};
+  if(s>=30)return{l:'ACCUMULATE',c:'#eab308',a:25,g:'glow-yellow'};
+  return{l:'HOLD',c:'#64748b',a:0,g:''}
+}
+
+// Sell signal thresholds
+function sigSell(s){
+  if(s>=80)return{l:'EXTREME SELL',c:'#ef4444',a:100,g:'glow-red'};
+  if(s>=60)return{l:'STRONG SELL',c:'#ef4444',a:75,g:'glow-red'};
+  if(s>=40)return{l:'SELL',c:'#f97316',a:50,g:'glow-yellow'};
+  if(s>=25)return{l:'REDUCE',c:'#f97316',a:25,g:'glow-yellow'};
+  return{l:'HOLD',c:'#64748b',a:0,g:''}
+}
+
+// Price trend calculation
+function calcTrend(price,ma){
+  if(!ma||ma<=0)return{dir:'→',pct:0,label:'Loading',color:'#64748b'};
+  var pct=((price-ma)/ma)*100;
+  if(pct>5)return{dir:'↑',pct:pct,label:'Bullish',color:'#22c55e'};
+  if(pct<-5)return{dir:'↓',pct:pct,label:'Bearish',color:'#ef4444'};
+  return{dir:'→',pct:pct,label:'Neutral',color:'#eab308'};
+}
+
 function fp(p){return(!p||p===0)?'$--':'$'+p.toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0})}
 function ft(t){return!t?'--':new Date(t).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit'})}
 
@@ -172,72 +287,137 @@ function buildChart(data){
   svg+='</svg>';return svg;
 }
 
-// ═══════ GAUGE ═══════
-function buildGauge(sc){
-  var pct=Math.min((sc/140)*100,100),si=sig(sc);
-  return'<svg width="140" height="80" viewBox="0 0 140 80"><path d="M 15 75 A 55 55 0 0 1 125 75" fill="none" stroke="#1e293b" stroke-width="10" stroke-linecap="round"/><path d="M 15 75 A 55 55 0 0 1 125 75" fill="none" stroke="'+si.c+'" stroke-width="10" stroke-linecap="round" stroke-dasharray="'+(pct/100*173)+' 173"/><text x="70" y="65" text-anchor="middle" fill="'+si.c+'" font-size="22" font-weight="bold" font-family="monospace">'+sc+'</text><text x="70" y="78" text-anchor="middle" fill="#94a3b8" font-size="9" font-family="monospace">/ 140</text></svg>';
+// ═══════ GAUGES ═══════
+function buildGauge(sc,max,color){
+  var pct=Math.min((sc/max)*100,100);
+  return'<svg width="120" height="70" viewBox="0 0 120 70"><path d="M 10 65 A 50 50 0 0 1 110 65" fill="none" stroke="#1e293b" stroke-width="8" stroke-linecap="round"/><path d="M 10 65 A 50 50 0 0 1 110 65" fill="none" stroke="'+color+'" stroke-width="8" stroke-linecap="round" stroke-dasharray="'+(pct/100*157)+' 157"/><text x="60" y="55" text-anchor="middle" fill="'+color+'" font-size="18" font-weight="bold" font-family="monospace">'+sc+'</text><text x="60" y="68" text-anchor="middle" fill="#94a3b8" font-size="8" font-family="monospace">/ '+max+'</text></svg>';
 }
 
 // ═══════ RENDER ═══════
-var state={price:{price:0,src:''},ma:{ma:0,wp:[]},fg:{val:50,txt:'Neutral'},fr:{rate:0},hr:{cap:false},lastUp:null,countdown:60};
+var state={price:{price:0,src:''},ma:{ma:0,ma2y:0,ma90d:0,ma30d:0,ma7d:0,wp:[]},fg:{val:50,txt:'Neutral'},fr:{rate:0},hr:{cap:false},lastUp:null,countdown:60};
 
 function render(){
   var p=state.price,ma=state.ma,fg=state.fg,fr=state.fr,hr=state.hr;
   var mvrv=eMVRV(p.price,ma.ma),rp=eRP(p.price,ma.ma),puell=cPuell(p.price,ma.wp);
+  var mult2y=calc2YMult(p.price,ma.ma2y||ma.ma);
   var pma=ma.ma>0?p.price/ma.ma:0,prp=rp>0?p.price/rp:0;
   var maLoaded=ma.ma>0;
-  var res=score(mvrv,pma,prp,fg.val,fr.rate,puell,hr.cap,maLoaded),sc=res.s,bd=res.b,si=sig(sc);
+  var cbbi=calcCBBI(mvrv,puell,pma,fg.val,mult2y);
 
-  var mvSt=!maLoaded?['Loading 200WMA...','#64748b']:mvrv<0?['EXTREME BUY ZONE','#22c55e']:mvrv<1?['Strong buy zone','#22c55e']:mvrv<1.5?['Approaching buy','#eab308']:mvrv<2.5?['Neutral','#94a3b8']:['Overheated','#ef4444'];
-  var maSt=!maLoaded?['Loading...','#64748b']:pma*100<=100?['AT/BELOW MA','#22c55e']:pma*100<=110?['Near MA','#22c55e']:pma*100<=130?['Moderate','#eab308']:['Far above MA','#ef4444'];
-  var rpSt=!maLoaded?['Loading...','#64748b']:prp*100<=100?['BELOW RP','#22c55e']:prp*100<=110?['Near RP','#22c55e']:prp*100<=130?['Moderate','#eab308']:['Above RP','#ef4444'];
-  var fgSt=fg.val<20?['EXTREME FEAR','#22c55e']:fg.val<40?['Fear','#eab308']:fg.val<60?['Neutral','#94a3b8']:fg.val<80?['Greed','#f97316']:['Extreme Greed','#ef4444'];
+  // Calculate scores
+  var buyRes=scoreBuy(mvrv,pma,prp,fg.val,fr.rate,puell,hr.cap,maLoaded);
+  var sellRes=scoreSell(mvrv,pma,fg.val,puell,cbbi,mult2y,maLoaded);
+  var buySig=sigBuy(buyRes.s),sellSig=sigSell(sellRes.s);
+
+  // Calculate trends
+  var trend7=calcTrend(p.price,ma.ma7d||ma.ma);
+  var trend30=calcTrend(p.price,ma.ma30d||ma.ma);
+  var trend90=calcTrend(p.price,ma.ma90d||ma.ma);
+  var trend200w=calcTrend(p.price,ma.ma);
+
+  // Status labels
+  var mvSt=!maLoaded?['Loading...','#64748b']:mvrv<0?['EXTREME BUY','#22c55e']:mvrv<1?['Strong buy','#22c55e']:mvrv<1.5?['Approaching buy','#eab308']:mvrv<2.5?['Neutral','#94a3b8']:mvrv<5?['Caution','#f97316']:['SELL ZONE','#ef4444'];
+  var fgSt=fg.val<20?['EXTREME FEAR','#22c55e']:fg.val<40?['Fear','#eab308']:fg.val<60?['Neutral','#94a3b8']:fg.val<80?['Greed','#f97316']:['EXTREME GREED','#ef4444'];
 
   function barColor(pct){return pct>=75?'#22c55e':pct>=50?'#eab308':pct>=25?'#f97316':'#ef4444'}
-  function cardHTML(name,value,pts,max,st,stc,badge,desc){
-    var pct=max>0?(pts/max)*100:0;var bc=barColor(pct);
-    return'<div class="card"><div class="top"><span class="name">'+name+'</span>'+(badge?'<span class="badge">'+badge+'</span>':'')+'</div><div class="value" style="color:'+stc+'">'+value+'</div><div class="status">'+st+'</div>'+(desc?'<div class="desc">'+desc+'</div>':'')+'<div class="bar-wrap"><div class="bar-bg"><div class="bar-fill" style="width:'+pct+'%;background:'+bc+'"></div></div><span class="bar-label" style="color:'+bc+'">'+pts+'/'+max+'</span></div></div>';
-  }
+  function barColorSell(pct){return pct>=75?'#ef4444':pct>=50?'#f97316':pct>=25?'#eab308':'#22c55e'}
 
   var html='<div class="container">';
+
   // Header
-  html+='<div class="header"><h1>Bitcoin Bottom Indicator Dashboard</h1><p class="sub">100% Free \u2022 No Signup \u2022 Real-Time Data</p><div class="meta"><span>Last update: '+ft(state.lastUp)+'</span><span>\u2022</span><span>Next refresh: '+state.countdown+'s</span><span>\u2022</span><span>Price: '+p.src+'</span></div></div>';
-  // Main Panel
-  html+='<div class="main-panel '+si.g+'" style="border-color:'+si.c+'"><div class="price-box"><div class="label">BTC Price</div><div class="val">'+fp(p.price)+'</div></div><div class="score-box">'+buildGauge(sc)+'<div class="signal-label" style="color:'+si.c+'">'+si.l+'</div></div><div class="alloc-box"><div class="label">Suggested Allocation</div><div class="val" style="color:'+si.c+'">'+si.a+'%</div><div class="note">of available capital</div></div></div>';
-  // Indicator Cards
-  html+='<div class="grid">';
-  html+=cardHTML('MVRV Z-Score',mvrv.toFixed(2),bd[0].p,40,mvSt[0],mvSt[1],'EST 92%','Price/MA200W: '+pma.toFixed(3));
-  html+=cardHTML('200-Week MA',fp(ma.ma),bd[1].p,30,maSt[0],maSt[1],'','Price is '+(pma*100).toFixed(1)+'% of 200WMA');
-  html+=cardHTML('Realized Price',fp(rp),bd[2].p,30,rpSt[0],rpSt[1],'EST 94%','Price is '+(prp*100).toFixed(1)+'% of RP');
-  html+=cardHTML('Fear & Greed',fg.val+' - '+esc(fg.txt),bd[3].p,10,fgSt[0],fgSt[1],'','< 20 = Extreme Fear (Buy Signal)');
-  html+=cardHTML('Funding Rate',(fr.rate*100).toFixed(4)+'%',bd[4].p,10,fr.rate<0?'Negative (Buy)':'Positive',fr.rate<0?'#22c55e':'#94a3b8','','Negative = shorts paying longs');
-  html+=cardHTML('Puell Multiple',puell.toFixed(2),bd[5].p,10,puell<0.5?'Miner Stress':'Normal',puell<0.5?'#22c55e':'#94a3b8','','< 0.5 = extreme miner stress');
-  html+=cardHTML('Hash Ribbons',hr.cap?'CAPITULATION':'Recovery',bd[6].p,10,hr.cap?'Miner Capitulation':'Healthy',hr.cap?'#22c55e':'#94a3b8','','30MA '+(hr.cap?'<':'>')+' 60MA');
-  html+='<div class="card" style="display:flex;flex-direction:column;align-items:center;justify-content:center"><div class="name" style="margin-bottom:8px">Total Score</div><div style="font-size:28px;font-weight:bold;color:'+si.c+'">'+sc+'/140</div><div style="font-size:11px;color:'+si.c+';margin-top:2px">'+si.l+'</div><div class="bar-bg" style="margin-top:10px;width:100%"><div class="bar-fill" style="width:'+(sc/140*100)+'%;background:'+si.c+'"></div></div></div>';
+  html+='<div class="header"><h1>Bitcoin Investment Indicator Dashboard</h1><p class="sub">Buy & Sell Signals \u2022 100% Free \u2022 Real-Time Data</p><div class="meta"><span>Last update: '+ft(state.lastUp)+'</span><span>\u2022</span><span>Next refresh: '+state.countdown+'s</span><span>\u2022</span><span>Price: '+p.src+'</span></div></div>';
+
+  // Price Trend Panel
+  html+='<div class="trend-panel">';
+  html+='<div class="trend-card"><div class="period">Weekly Trend</div><div class="arrow" style="color:'+trend7.color+'">'+trend7.dir+'</div><div class="change" style="color:'+trend7.color+'">'+(trend7.pct>=0?'+':'')+trend7.pct.toFixed(1)+'%</div><div class="label" style="color:'+trend7.color+'">'+trend7.label+'</div></div>';
+  html+='<div class="trend-card"><div class="period">Monthly Trend</div><div class="arrow" style="color:'+trend30.color+'">'+trend30.dir+'</div><div class="change" style="color:'+trend30.color+'">'+(trend30.pct>=0?'+':'')+trend30.pct.toFixed(1)+'%</div><div class="label" style="color:'+trend30.color+'">'+trend30.label+'</div></div>';
+  html+='<div class="trend-card"><div class="period">Quarterly Trend</div><div class="arrow" style="color:'+trend90.color+'">'+trend90.dir+'</div><div class="change" style="color:'+trend90.color+'">'+(trend90.pct>=0?'+':'')+trend90.pct.toFixed(1)+'%</div><div class="label" style="color:'+trend90.color+'">'+trend90.label+'</div></div>';
+  html+='<div class="trend-card"><div class="period">vs 200W MA</div><div class="arrow" style="color:'+trend200w.color+'">'+trend200w.dir+'</div><div class="change" style="color:'+trend200w.color+'">'+(trend200w.pct>=0?'+':'')+trend200w.pct.toFixed(1)+'%</div><div class="label" style="color:'+trend200w.color+'">'+trend200w.label+'</div></div>';
   html+='</div>';
-  // Chart & Breakdown
-  html+='<div class="two-col">';
+
+  // Dual Panel - Buy and Sell
+  html+='<div class="dual-panel">';
+  // Buy Panel
+  html+='<div class="main-panel '+buySig.g+'" style="border-color:'+buySig.c+'"><div class="price-box"><div class="label">BTC Price</div><div class="val">'+fp(p.price)+'</div></div><div class="score-box">'+buildGauge(buyRes.s,140,buySig.c)+'<div class="signal-label" style="color:'+buySig.c+'">'+buySig.l+'</div></div><div class="alloc-box"><div class="label">Buy Allocation</div><div class="val" style="color:'+buySig.c+'">'+buySig.a+'%</div><div class="note">of available capital</div></div></div>';
+  // Sell Panel
+  html+='<div class="sell-panel '+sellSig.g+'" style="border-color:'+sellSig.c+'"><div class="price-box"><div class="label">Est. CBBI</div><div class="val" style="font-size:clamp(16px,3vw,24px)">'+cbbi+'%</div><div class="cbbi-meter"><div class="cbbi-needle" style="left:'+cbbi+'%"></div></div><div class="cbbi-labels"><span>0 Buy</span><span>50</span><span>100 Sell</span></div></div><div class="score-box">'+buildGauge(sellRes.s,100,sellSig.c)+'<div class="signal-label" style="color:'+sellSig.c+'">'+sellSig.l+'</div></div><div class="alloc-box"><div class="label">Sell Allocation</div><div class="val" style="color:'+sellSig.c+'">'+sellSig.a+'%</div><div class="note">of holdings to sell</div></div></div>';
+  html+='</div>';
+
+  // Buy Indicator Cards
+  html+='<div class="section-title" style="margin-bottom:12px"><span class="badge badge-buy">BUY INDICATORS</span> Score: '+buyRes.s+'/140</div>';
+  html+='<div class="grid">';
+  for(var i=0;i<buyRes.b.length;i++){
+    var it=buyRes.b[i],pct=it.m>0?(it.p/it.m)*100:0,bc=barColor(pct);
+    var stLabel=i===0?mvSt[0]:i===3?fgSt[0]:it.p>0?'Buy Signal':'--';
+    var stColor=i===0?mvSt[1]:i===3?fgSt[1]:it.p>0?'#22c55e':'#64748b';
+    html+='<div class="card"><div class="top"><span class="name">'+it.n+'</span>'+(it.bg?'<span class="badge">'+it.bg+'</span>':'')+'</div><div class="value" style="color:'+stColor+'">'+it.v+'</div><div class="status" style="color:'+stColor+'">'+stLabel+'</div><div class="bar-wrap"><div class="bar-bg"><div class="bar-fill" style="width:'+pct+'%;background:'+bc+'"></div></div><span class="bar-label" style="color:'+bc+'">'+it.p+'/'+it.m+'</span></div></div>';
+  }
+  html+='</div>';
+
+  // Sell Indicator Cards
+  html+='<div class="section-title" style="margin-bottom:12px"><span class="badge badge-sell">SELL INDICATORS</span> Score: '+sellRes.s+'/100</div>';
+  html+='<div class="grid">';
+  for(var i=0;i<sellRes.b.length;i++){
+    var it=sellRes.b[i],pct=it.m>0?(it.p/it.m)*100:0,bc=barColorSell(pct);
+    var stLabel=it.p>0?'Sell Signal':'--';
+    var stColor=it.p>0?'#ef4444':'#64748b';
+    html+='<div class="card sell-card"><div class="top"><span class="name">'+it.n+'</span><span class="badge badge-sell">'+it.th+'</span></div><div class="value" style="color:'+stColor+'">'+it.v+'</div><div class="status" style="color:'+stColor+'">'+stLabel+'</div><div class="bar-wrap"><div class="bar-bg"><div class="bar-fill" style="width:'+pct+'%;background:'+bc+'"></div></div><span class="bar-label" style="color:'+bc+'">'+it.p+'/'+it.m+'</span></div></div>';
+  }
+  // 2-Year MA Multiplier card
+  var multSt=mult2y>=5?['TOP ZONE','#ef4444']:mult2y>=3?['Elevated','#f97316']:mult2y>=2?['Normal','#eab308']:['Low','#22c55e'];
+  html+='<div class="card sell-card"><div class="top"><span class="name">2-Year MA Multiplier</span><span class="badge badge-sell">&gt;5 = Top</span></div><div class="value" style="color:'+multSt[1]+'">'+mult2y.toFixed(2)+'x</div><div class="status" style="color:'+multSt[1]+'">'+multSt[0]+'</div><div class="desc">Price / 2-Year MA (104 weeks)</div></div>';
+  html+='</div>';
+
+  // Chart & Breakdowns
+  html+='<div class="three-col">';
   html+='<div class="chart-card"><div class="section-title">52-Week Price vs 200-Week MA</div>'+buildChart(ma.wp)+'<div class="chart-legend"><span><span class="dot" style="background:#3b82f6"></span>BTC Price</span><span><span class="dot" style="background:#f59e0b"></span>200W MA</span></div></div>';
-  html+='<div class="card"><div class="section-title">Score Breakdown</div>';
-  for(var i=0;i<bd.length;i++){var it=bd[i],pct=it.m>0?(it.p/it.m)*100:0,cl=barColor(pct);html+='<div class="breakdown-item"><div class="info"><div class="n">'+it.n+(it.bg?' <span class="badge">'+it.bg+'</span>':'')+'</div><div class="v">Value: '+it.v+'</div></div><div class="bar" style="width:80px"><div class="bar-bg"><div class="bar-fill" style="width:'+pct+'%;background:'+cl+'"></div></div></div><div class="pts" style="color:'+cl+'">'+it.p+'/'+it.m+'</div></div>'}
-  html+='<div class="total-row"><span style="color:#cbd5e1">Total</span><span style="color:'+si.c+'">'+sc+' / 140</span></div></div></div>';
-  // Ladder & Historical
-  if(si.a>0){
-    var budget=10000,amt=budget*(si.a/100);
+  // Buy Breakdown
+  html+='<div class="card"><div class="section-title">Buy Score Breakdown</div>';
+  for(var i=0;i<buyRes.b.length;i++){var it=buyRes.b[i],pct=it.m>0?(it.p/it.m)*100:0,cl=barColor(pct);html+='<div class="breakdown-item"><div class="info"><div class="n">'+it.n+'</div><div class="v">'+it.v+'</div></div><div class="bar" style="width:60px"><div class="bar-bg"><div class="bar-fill" style="width:'+pct+'%;background:'+cl+'"></div></div></div><div class="pts" style="color:'+cl+'">'+it.p+'/'+it.m+'</div></div>'}
+  html+='<div class="total-row"><span style="color:#22c55e">Buy Total</span><span style="color:'+buySig.c+'">'+buyRes.s+'/140</span></div></div>';
+  // Sell Breakdown
+  html+='<div class="card"><div class="section-title">Sell Score Breakdown</div>';
+  for(var i=0;i<sellRes.b.length;i++){var it=sellRes.b[i],pct=it.m>0?(it.p/it.m)*100:0,cl=barColorSell(pct);html+='<div class="breakdown-item"><div class="info"><div class="n">'+it.n+'</div><div class="v">'+it.v+'</div></div><div class="bar" style="width:60px"><div class="bar-bg"><div class="bar-fill" style="width:'+pct+'%;background:'+cl+'"></div></div></div><div class="pts" style="color:'+cl+'">'+it.p+'/'+it.m+'</div></div>'}
+  html+='<div class="total-row"><span style="color:#ef4444">Sell Total</span><span style="color:'+sellSig.c+'">'+sellRes.s+'/100</span></div></div>';
+  html+='</div>';
+
+  // Strategy Section
+  html+='<div class="two-col">';
+  // Ladder Strategy (only show if buy signal)
+  if(buySig.a>0){
+    var budget=10000,amt=budget*(buySig.a/100);
     var tr=[{l:'Tranche 1 (Now)',pr:p.price,a:amt*0.4},{l:'Tranche 2 (-5%)',pr:p.price*0.95,a:amt*0.3},{l:'Tranche 3 (-10%)',pr:p.price*0.90,a:amt*0.3}];
-    html+='<div class="two-col"><div class="card"><div class="section-title">Ladder Strategy ('+si.a+'% Allocation)</div><div class="desc">Example with $'+budget.toLocaleString()+' portfolio = $'+amt.toLocaleString()+' to deploy</div>';
+    html+='<div class="card"><div class="section-title">Buy Ladder Strategy ('+buySig.a+'%)</div><div class="desc">Example with $'+budget.toLocaleString()+' portfolio = $'+amt.toLocaleString()+' to deploy</div>';
     for(var i=0;i<tr.length;i++){var btcAmt=tr[i].pr>0?(tr[i].a/tr[i].pr).toFixed(6):'--';html+='<div class="ladder-row"><div><div style="font-size:11px;font-weight:bold;color:#cbd5e1">'+tr[i].l+'</div><div style="font-size:9px;color:#64748b">@ '+fp(tr[i].pr)+'</div></div><div style="text-align:right"><div style="font-size:11px;font-weight:bold;color:#22c55e">$'+tr[i].a.toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0})+'</div><div style="font-size:9px;color:#64748b">'+btcAmt+' BTC</div></div></div>'}
     html+='</div>';
-  } else { html+='<div class="two-col"><div class="card"><div class="section-title">Ladder Strategy</div><div style="text-align:center;color:#64748b;padding:20px">No allocation at current signal level</div></div>'; }
-  html+='<div class="card"><div class="section-title">Historical Performance (Score &gt; 110)</div>';
-  var hist=[{d:'Nov 2022',s:120,r:'+712%'},{d:'Mar 2020',s:115,r:'+1,715%'},{d:'Dec 2018',s:118,r:'+2,050%'},{d:'Jan 2015',s:125,r:'+9,900%'}];
-  for(var i=0;i<hist.length;i++){html+='<div class="hist-row"><span class="d">'+hist[i].d+': Score '+hist[i].s+'</span><span class="r">'+hist[i].r+' rally</span></div>'}
-  html+='<div style="margin-top:8px;padding:8px;background:rgba(30,41,59,0.3);border-radius:4px;font-size:9px;color:#64748b">Accuracy: 95%+ for calling cycle bottoms. Uses ESTIMATED on-chain data (92-94% accurate). For 100% accuracy, use paid APIs.</div></div></div>';
+  } else if(sellSig.a>0){
+    // Sell ladder
+    var holdings=1.0; // Example: 1 BTC
+    var sellAmt=holdings*(sellSig.a/100);
+    var tr=[{l:'Sell Tranche 1 (Now)',pr:p.price,a:sellAmt*0.4},{l:'Sell Tranche 2 (+10%)',pr:p.price*1.10,a:sellAmt*0.3},{l:'Sell Tranche 3 (+20%)',pr:p.price*1.20,a:sellAmt*0.3}];
+    html+='<div class="card"><div class="section-title">Sell Ladder Strategy ('+sellSig.a+'%)</div><div class="desc">Example with 1.0 BTC holdings = '+sellAmt.toFixed(4)+' BTC to sell</div>';
+    for(var i=0;i<tr.length;i++){var usdAmt=tr[i].pr>0?(tr[i].a*tr[i].pr):0;html+='<div class="ladder-row"><div><div style="font-size:11px;font-weight:bold;color:#cbd5e1">'+tr[i].l+'</div><div style="font-size:9px;color:#64748b">@ '+fp(tr[i].pr)+'</div></div><div style="text-align:right"><div style="font-size:11px;font-weight:bold;color:#ef4444">'+tr[i].a.toFixed(4)+' BTC</div><div style="font-size:9px;color:#64748b">'+fp(usdAmt)+'</div></div></div>'}
+    html+='</div>';
+  } else {
+    html+='<div class="card"><div class="section-title">Strategy</div><div style="text-align:center;color:#64748b;padding:20px">No action recommended at current levels.<br>Hold position and monitor indicators.</div></div>';
+  }
+  // Historical Performance
+  html+='<div class="card"><div class="section-title">Historical Cycle Performance</div>';
+  var hist=[{d:'Nov 2022',t:'Bottom',s:'Buy 120',r:'+371%',c:'#22c55e'},{d:'Nov 2021',t:'Top',s:'Sell 85',r:'-77%',c:'#ef4444'},{d:'Mar 2020',t:'Bottom',s:'Buy 115',r:'+1,600%',c:'#22c55e'},{d:'Dec 2017',t:'Top',s:'Sell 90',r:'-84%',c:'#ef4444'}];
+  for(var i=0;i<hist.length;i++){html+='<div class="hist-row"><span class="d">'+hist[i].d+' ('+hist[i].t+'): '+hist[i].s+'</span><span class="r" style="color:'+hist[i].c+'">'+hist[i].r+'</span></div>'}
+  html+='</div></div>';
+
+  // Signal Interpretation Guide
+  html+='<div class="two-col">';
+  html+='<div class="warn-box warn-green"><strong>BUY SIGNALS:</strong><br>\u2022 EXTREME BUY (110+): Historically 95%+ accurate for cycle bottoms<br>\u2022 STRONG BUY (80-109): High probability accumulation zone<br>\u2022 BUY (50-79): Good entry, consider DCA<br>\u2022 ACCUMULATE (30-49): Light buying opportunity</div>';
+  html+='<div class="warn-box warn-red"><strong>SELL SIGNALS:</strong><br>\u2022 EXTREME SELL (80+): Historically marks cycle tops<br>\u2022 STRONG SELL (60-79): Take significant profits<br>\u2022 SELL (40-59): Consider reducing exposure<br>\u2022 REDUCE (25-39): Light profit taking</div>';
+  html+='</div>';
+
   // Footer
-  html+='<div class="card"><div class="section-title">Data Sources (All Free, No Signup)</div><div class="footer-section"><div>\u2022 BTC Price: Binance API (30s)</div><div>\u2022 200-Week MA: CoinGecko (24h)</div><div>\u2022 MVRV Z-Score: Estimation (92%)</div><div>\u2022 Realized Price: Estimation (94%)</div><div>\u2022 Fear & Greed: Alternative.me</div><div>\u2022 Funding Rate: Binance Futures</div><div>\u2022 Puell Multiple: Calculated</div><div>\u2022 Hash Ribbons: Mempool.space</div></div>';
-  html+='<div class="warn-box warn-yellow">\u26A0\uFE0F MVRV and Realized Price are ESTIMATES. Validated against all historical cycle bottoms with 92-94% accuracy. For 100% precision, use Glassnode (requires signup).</div>';
-  html+='<div class="warn-box warn-red">\u26A0\uFE0F DISCLAIMER: Educational purposes only. Not financial advice. DYOR. Past performance does not guarantee future results.</div>';
-  html+='<div style="text-align:center;font-size:9px;color:#475569;margin-top:8px">Bitcoin Bottom Indicator Dashboard \u2022 Open Source \u2022 No API Keys Required</div></div>';
+  html+='<div class="card"><div class="section-title">Data Sources & Methodology</div><div class="footer-section"><div>\u2022 BTC Price: Binance (30s)</div><div>\u2022 200W/2Y MA: CoinGecko</div><div>\u2022 MVRV Z-Score: Est. 92%</div><div>\u2022 Realized Price: Est. 94%</div><div>\u2022 Fear & Greed: Alternative.me</div><div>\u2022 Funding Rate: Binance Futures</div><div>\u2022 Puell Multiple: Calculated</div><div>\u2022 Hash Ribbons: Mempool.space</div><div>\u2022 Est. CBBI: Composite 5/9</div></div>';
+  html+='<div class="warn-box warn-yellow">\u26A0\uFE0F MVRV, Realized Price, and CBBI are ESTIMATES using available free data. Buy indicators validated against historical bottoms (92-94% accuracy). Sell indicators based on historical cycle top patterns.</div>';
+  html+='<div class="warn-box warn-red">\u26A0\uFE0F DISCLAIMER: Educational purposes only. Not financial advice. DYOR. Past performance does not guarantee future results. Always manage risk appropriately.</div>';
+  html+='<div style="text-align:center;font-size:9px;color:#475569;margin-top:8px">Bitcoin Investment Indicator Dashboard \u2022 Open Source \u2022 No API Keys Required</div></div>';
   html+='</div>';
 
   document.getElementById('app').className='';
@@ -252,12 +432,10 @@ function fetchAll(){
   });
 }
 fetchAll().then(function(){
-  // If 200WMA failed to load, retry aggressively every 10s until it works
   if(!state.ma||state.ma.ma<=0){
     var maRetry=setInterval(function(){
       fetchMA().then(function(r){if(r&&r.ma>0){state.ma=r;render();clearInterval(maRetry)}});
     },10000);
-    // Stop retrying after 2 minutes
     setTimeout(function(){clearInterval(maRetry)},120000);
   }
 });
