@@ -61,6 +61,36 @@ body{background:#0f172a;color:#e2e8f0;font-family:-apple-system,BlinkMacSystemFo
 .ind-card .ind-fill{height:100%;border-radius:3px;transition:width 0.5s}
 .ind-card .ind-thresholds{display:flex;justify-content:space-between;font-size:8px;color:#475569;margin-top:4px}
 
+/* Trend Trading Panel */
+.trend-master{background:linear-gradient(135deg,rgba(30,41,59,0.95),rgba(15,23,42,0.98));border:2px solid #334155;border-radius:16px;padding:20px;margin-bottom:16px}
+.trend-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
+.trend-header .title{font-size:12px;color:#94a3b8;text-transform:uppercase;letter-spacing:2px}
+.trend-header .bias{font-size:14px;font-weight:bold;padding:6px 16px;border-radius:6px}
+.trend-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:16px}
+.trend-tf{background:#0f172a;border-radius:12px;padding:16px;text-align:center;border:2px solid transparent}
+.trend-tf.long{border-color:#22c55e;box-shadow:0 0 15px rgba(34,197,94,0.2)}
+.trend-tf.short{border-color:#ef4444;box-shadow:0 0 15px rgba(239,68,68,0.2)}
+.trend-tf .tf-label{font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px}
+.trend-tf .tf-signal{font-size:32px;margin-bottom:4px}
+.trend-tf .tf-direction{font-size:16px;font-weight:bold;margin-bottom:8px}
+.trend-tf .tf-strength{margin-bottom:8px}
+.trend-tf .tf-strength-label{font-size:8px;color:#64748b;margin-bottom:4px}
+.trend-tf .tf-strength-bar{height:6px;background:#1e293b;border-radius:3px;overflow:hidden}
+.trend-tf .tf-strength-fill{height:100%;border-radius:3px}
+.trend-tf .tf-details{font-size:9px;color:#64748b;text-align:left}
+.trend-tf .tf-row{display:flex;justify-content:space-between;padding:3px 0}
+.trend-confluence{background:#0f172a;border-radius:10px;padding:14px;margin-bottom:12px}
+.trend-confluence .conf-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.trend-confluence .conf-title{font-size:10px;color:#94a3b8;text-transform:uppercase}
+.trend-confluence .conf-value{font-size:12px;font-weight:bold}
+.trend-confluence .conf-bar{display:flex;gap:4px;margin-bottom:8px}
+.trend-confluence .conf-segment{flex:1;height:24px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:bold}
+.trend-action{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.trend-action-box{background:#0f172a;border-radius:10px;padding:14px}
+.trend-action-box .tab-label{font-size:9px;color:#64748b;text-transform:uppercase;margin-bottom:6px}
+.trend-action-box .tab-value{font-size:14px;font-weight:bold;margin-bottom:4px}
+.trend-action-box .tab-note{font-size:9px;color:#475569}
+
 /* Price Action - Compact */
 .price-action{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px}
 .pa-card{background:#1e293b;border:1px solid #334155;border-radius:10px;padding:14px}
@@ -112,6 +142,8 @@ body{background:#0f172a;color:#e2e8f0;font-family:-apple-system,BlinkMacSystemFo
 @media(max-width:900px){
   .action-panel{grid-template-columns:1fr}
   .indicators-grid{grid-template-columns:repeat(2,1fr)}
+  .trend-grid{grid-template-columns:1fr}
+  .trend-action{grid-template-columns:1fr}
   .price-action{grid-template-columns:1fr}
   .history-grid{grid-template-columns:1fr}
   .ladder-grid{grid-template-columns:1fr}
@@ -221,6 +253,7 @@ function fetchDaily(){
     var current=closes[closes.length-1];
     var result={
       price:current,
+      closes:closes, // Raw closes for trend analysis
       ema7:ema7[ema7.length-1],
       ema21:ema21[ema21.length-1],
       sma50:sma50[sma50.length-1],
@@ -245,7 +278,7 @@ function fetchDaily(){
   }).catch(function(){
     var f=C.any('daily');
     if(f)return f.value;
-    return{price:0,ema7:0,ema21:0,sma50:0,sma200:0,rsi:50,cross:'none',ema7Prev:0,ema21Prev:0,sma50Prev:0,pricePrev:0,price7d:0,price30d:0,price90d:0,src:'N/A',err:true};
+    return{price:0,closes:[],ema7:0,ema21:0,sma50:0,sma200:0,rsi:50,cross:'none',ema7Prev:0,ema21Prev:0,sma50Prev:0,pricePrev:0,price7d:0,price30d:0,price90d:0,src:'N/A',err:true};
   });
 }
 
@@ -311,6 +344,193 @@ function detectCross(data,shortPeriod,longPeriod){
     if(!above&&prevA)return'death';  // 50 crossed below 200
   }
   return currAbove?'bullish':'bearish';
+}
+
+// ═══════ TREND TRADING CALCULATIONS ═══════
+// Professional trend trading methodology for LONG/SHORT decisions
+
+// Calculate MACD (Moving Average Convergence Divergence)
+function calcMACD(data){
+  if(data.length<26)return{macd:0,signal:0,hist:0,trend:'neutral'};
+  var ema12=calcEMA(data,12);
+  var ema26=calcEMA(data,26);
+  var macdLine=[];
+  for(var i=0;i<data.length;i++){
+    macdLine.push(ema12[i]-ema26[i]);
+  }
+  var signalLine=calcEMA(macdLine,9);
+  var len=data.length-1;
+  var macd=macdLine[len];
+  var signal=signalLine[len];
+  var hist=macd-signal;
+  var prevHist=macdLine[len-1]-signalLine[len-1];
+  // Determine trend: bullish if MACD > signal and histogram growing
+  var trend=macd>signal?(hist>prevHist?'strong_bull':'bull'):macd<signal?(hist<prevHist?'strong_bear':'bear'):'neutral';
+  return{macd:macd,signal:signal,hist:hist,trend:trend};
+}
+
+// Detect Trend Structure (Higher Highs/Higher Lows vs Lower Highs/Lower Lows)
+function calcTrendStructure(data,period){
+  if(data.length<period)return{structure:'unknown',score:0};
+  var recent=data.slice(-period);
+  // Find swing highs and lows (simplified: local maxima/minima over 5 periods)
+  var highs=[],lows=[];
+  for(var i=2;i<recent.length-2;i++){
+    if(recent[i]>recent[i-1]&&recent[i]>recent[i-2]&&recent[i]>recent[i+1]&&recent[i]>recent[i+2]){
+      highs.push({idx:i,val:recent[i]});
+    }
+    if(recent[i]<recent[i-1]&&recent[i]<recent[i-2]&&recent[i]<recent[i+1]&&recent[i]<recent[i+2]){
+      lows.push({idx:i,val:recent[i]});
+    }
+  }
+  if(highs.length<2||lows.length<2)return{structure:'consolidation',score:50};
+
+  // Check last 3 highs and lows for structure
+  var lastHighs=highs.slice(-3);
+  var lastLows=lows.slice(-3);
+
+  var hhCount=0,hlCount=0,lhCount=0,llCount=0;
+  for(var i=1;i<lastHighs.length;i++){
+    if(lastHighs[i].val>lastHighs[i-1].val)hhCount++;
+    else lhCount++;
+  }
+  for(var i=1;i<lastLows.length;i++){
+    if(lastLows[i].val>lastLows[i-1].val)hlCount++;
+    else llCount++;
+  }
+
+  // Score: 100 = perfect uptrend, 0 = perfect downtrend, 50 = neutral
+  var bullPoints=hhCount*25+hlCount*25;
+  var bearPoints=lhCount*25+llCount*25;
+  var score=50+bullPoints-bearPoints;
+  score=Math.max(0,Math.min(100,score));
+
+  var structure=score>=70?'uptrend':score<=30?'downtrend':'ranging';
+  return{structure:structure,score:score,hh:hhCount,hl:hlCount,lh:lhCount,ll:llCount};
+}
+
+// Calculate Trend Strength (ADX-like, 0-100)
+function calcTrendStrength(data,period){
+  if(data.length<period+1)return 50;
+  var recent=data.slice(-period);
+  // Calculate directional movement
+  var upMoves=[],downMoves=[],trueRanges=[];
+  for(var i=1;i<recent.length;i++){
+    var up=recent[i]-recent[i-1];
+    var down=recent[i-1]-recent[i];
+    upMoves.push(up>0&&up>down?up:0);
+    downMoves.push(down>0&&down>up?down:0);
+    trueRanges.push(Math.abs(recent[i]-recent[i-1]));
+  }
+  // Average
+  var avgUp=0,avgDown=0,avgTR=0;
+  for(var i=0;i<upMoves.length;i++){
+    avgUp+=upMoves[i];
+    avgDown+=downMoves[i];
+    avgTR+=trueRanges[i];
+  }
+  avgUp/=upMoves.length;
+  avgDown/=downMoves.length;
+  avgTR/=trueRanges.length;
+  if(avgTR===0)return 50;
+
+  var pdi=(avgUp/avgTR)*100;
+  var ndi=(avgDown/avgTR)*100;
+  var dx=Math.abs(pdi-ndi)/(pdi+ndi)*100;
+  // ADX is smoothed DX, simplified here
+  return Math.min(100,Math.max(0,dx));
+}
+
+// Calculate MA Slope (rate of change)
+function calcSlope(data,period){
+  if(data.length<period)return 0;
+  var ma=calcSMA(data,period);
+  var curr=ma[ma.length-1];
+  var prev=ma[ma.length-period]||ma[0];
+  if(!curr||!prev)return 0;
+  return((curr-prev)/prev)*100;
+}
+
+// Main Trend Analysis for each timeframe
+function analyzeTrend(data,price,period,emaShort,emaLong,smaShort,smaLong){
+  var ema1=calcEMA(data,emaShort);
+  var ema2=calcEMA(data,emaLong);
+  var sma1=calcSMA(data,smaShort);
+  var sma2=calcSMA(data,smaLong);
+  var rsi=calcRSI(data,14);
+  var macd=calcMACD(data);
+  var structure=calcTrendStructure(data,period);
+  var strength=calcTrendStrength(data,14);
+
+  var len=data.length-1;
+  var currEma1=ema1[len]||0;
+  var currEma2=ema2[len]||0;
+  var currSma1=sma1[len]||0;
+  var currSma2=sma2[len]||0;
+  var currRsi=rsi[len-1]||50;
+
+  // EMA slope (is EMA trending up or down?)
+  var emaSlope=len>5?((currEma1-ema1[len-5])/ema1[len-5])*100:0;
+
+  // Scoring system for trend direction (-100 to +100)
+  var score=0;
+
+  // Price vs EMAs (+/- 20 pts each)
+  if(price>currEma1)score+=20;else score-=20;
+  if(price>currEma2)score+=15;else score-=15;
+
+  // EMA alignment (+/- 15 pts)
+  if(currEma1>currEma2)score+=15;else score-=15;
+
+  // SMA structure (+/- 15 pts)
+  if(currSma1>currSma2)score+=15;else score-=15;
+
+  // MACD signal (+/- 15 pts)
+  if(macd.trend==='strong_bull')score+=15;
+  else if(macd.trend==='bull')score+=10;
+  else if(macd.trend==='strong_bear')score-=15;
+  else if(macd.trend==='bear')score-=10;
+
+  // RSI confirmation (+/- 10 pts)
+  if(currRsi>60)score+=10;
+  else if(currRsi<40)score-=10;
+
+  // Trend structure (+/- 10 pts)
+  if(structure.structure==='uptrend')score+=10;
+  else if(structure.structure==='downtrend')score-=10;
+
+  // Normalize to -100 to +100
+  score=Math.max(-100,Math.min(100,score));
+
+  // Determine signal
+  var signal,direction,color;
+  if(score>=60){
+    signal='LONG';direction='↑';color='#22c55e';
+  }else if(score>=30){
+    signal='LEAN LONG';direction='↗';color='#86efac';
+  }else if(score>=-30){
+    signal='FLAT';direction='→';color='#eab308';
+  }else if(score>=-60){
+    signal='LEAN SHORT';direction='↘';color='#fb923c';
+  }else{
+    signal='SHORT';direction='↓';color='#ef4444';
+  }
+
+  return{
+    signal:signal,
+    direction:direction,
+    color:color,
+    score:score,
+    strength:strength,
+    ema1:currEma1,
+    ema2:currEma2,
+    sma1:currSma1,
+    sma2:currSma2,
+    rsi:currRsi,
+    macd:macd,
+    structure:structure,
+    emaSlope:emaSlope
+  };
 }
 
 // ═══════ OPTIMIZED CALCULATION FUNCTIONS ═══════
@@ -589,7 +809,7 @@ function buildGauge(sc,max,color){
 }
 
 // ═══════ RENDER ═══════
-var state={price:{price:0,src:''},ma:{ma:0,ma2y:0,ma90d:0,ma30d:0,ma7d:0,wp:[]},fg:{val:50,txt:'Neutral'},fr:{rate:0},hr:{cap:false},daily:{price:0,ema7:0,ema21:0,sma50:0,sma200:0,rsi:50,cross:'none',price7d:0,price30d:0,price90d:0},lastUp:null,countdown:60};
+var state={price:{price:0,src:''},ma:{ma:0,ma2y:0,ma90d:0,ma30d:0,ma7d:0,wp:[]},fg:{val:50,txt:'Neutral'},fr:{rate:0},hr:{cap:false},daily:{price:0,closes:[],ema7:0,ema21:0,sma50:0,sma200:0,rsi:50,cross:'none',price7d:0,price30d:0,price90d:0},lastUp:null,countdown:60};
 
 function render(){
   var p=state.price,ma=state.ma,fg=state.fg,fr=state.fr,hr=state.hr,daily=state.daily;
@@ -688,6 +908,127 @@ function render(){
     html+='</div>';
   }
   html+='</div>';
+
+  // ═══════ TREND TRADING PANEL ═══════
+  var closes=daily.closes||[];
+  var hasTrendData=closes.length>=50;
+
+  // Analyze each timeframe
+  // Short-term: 7/21 EMA, 20/50 SMA, 30-day structure
+  var shortTrend=hasTrendData?analyzeTrend(closes,p.price,30,7,21,20,50):{signal:'LOADING',direction:'→',color:'#64748b',score:0,strength:50};
+  // Medium-term: 21/50 EMA, 50/100 SMA, 60-day structure
+  var medTrend=hasTrendData?analyzeTrend(closes,p.price,60,21,50,50,100):{signal:'LOADING',direction:'→',color:'#64748b',score:0,strength:50};
+  // Long-term: 50/200 SMA, 90-day structure
+  var longTrend=hasTrendData?analyzeTrend(closes,p.price,90,50,100,50,200):{signal:'LOADING',direction:'→',color:'#64748b',score:0,strength:50};
+
+  // Calculate overall trend bias
+  var trendScore=(shortTrend.score*0.25)+(medTrend.score*0.35)+(longTrend.score*0.40);
+  var overallBias,biasColor,biasBg;
+  if(trendScore>=50){overallBias='STRONG LONG';biasColor='#22c55e';biasBg='rgba(34,197,94,0.15)';}
+  else if(trendScore>=20){overallBias='LONG BIAS';biasColor='#86efac';biasBg='rgba(134,239,172,0.1)';}
+  else if(trendScore>=-20){overallBias='NEUTRAL';biasColor='#eab308';biasBg='rgba(234,179,8,0.1)';}
+  else if(trendScore>=-50){overallBias='SHORT BIAS';biasColor='#fb923c';biasBg='rgba(251,146,60,0.1)';}
+  else{overallBias='STRONG SHORT';biasColor='#ef4444';biasBg='rgba(239,68,68,0.15)';}
+
+  // Count aligned timeframes
+  var longCount=(shortTrend.score>30?1:0)+(medTrend.score>30?1:0)+(longTrend.score>30?1:0);
+  var shortCount=(shortTrend.score<-30?1:0)+(medTrend.score<-30?1:0)+(longTrend.score<-30?1:0);
+
+  html+='<div class="trend-master" style="border-color:'+biasColor+'">';
+  html+='<div class="trend-header"><span class="title">Trend Trading Signals</span><span class="bias" style="background:'+biasBg+';color:'+biasColor+'">'+overallBias+'</span></div>';
+
+  // Timeframe grid
+  html+='<div class="trend-grid">';
+
+  // Short-term card
+  var stClass=shortTrend.score>=30?'long':shortTrend.score<=-30?'short':'';
+  html+='<div class="trend-tf '+stClass+'">';
+  html+='<div class="tf-label">Short-Term (1-7 Days)</div>';
+  html+='<div class="tf-signal" style="color:'+shortTrend.color+'">'+shortTrend.direction+'</div>';
+  html+='<div class="tf-direction" style="color:'+shortTrend.color+'">'+shortTrend.signal+'</div>';
+  html+='<div class="tf-strength"><div class="tf-strength-label">Trend Strength: '+shortTrend.strength.toFixed(0)+'%</div>';
+  html+='<div class="tf-strength-bar"><div class="tf-strength-fill" style="width:'+shortTrend.strength+'%;background:'+shortTrend.color+'"></div></div></div>';
+  html+='<div class="tf-details">';
+  html+='<div class="tf-row"><span>7/21 EMA</span><span style="color:'+(shortTrend.ema1>shortTrend.ema2?'#22c55e':'#ef4444')+'">'+(shortTrend.ema1>shortTrend.ema2?'Bullish':'Bearish')+'</span></div>';
+  html+='<div class="tf-row"><span>RSI (14)</span><span style="color:'+(shortTrend.rsi>60?'#22c55e':shortTrend.rsi<40?'#ef4444':'#eab308')+'">'+shortTrend.rsi.toFixed(0)+'</span></div>';
+  html+='<div class="tf-row"><span>MACD</span><span style="color:'+(shortTrend.macd.trend.includes('bull')?'#22c55e':'#ef4444')+'">'+shortTrend.macd.trend.replace('_',' ').toUpperCase()+'</span></div>';
+  html+='</div></div>';
+
+  // Medium-term card
+  var mtClass=medTrend.score>=30?'long':medTrend.score<=-30?'short':'';
+  html+='<div class="trend-tf '+mtClass+'">';
+  html+='<div class="tf-label">Medium-Term (1-4 Weeks)</div>';
+  html+='<div class="tf-signal" style="color:'+medTrend.color+'">'+medTrend.direction+'</div>';
+  html+='<div class="tf-direction" style="color:'+medTrend.color+'">'+medTrend.signal+'</div>';
+  html+='<div class="tf-strength"><div class="tf-strength-label">Trend Strength: '+medTrend.strength.toFixed(0)+'%</div>';
+  html+='<div class="tf-strength-bar"><div class="tf-strength-fill" style="width:'+medTrend.strength+'%;background:'+medTrend.color+'"></div></div></div>';
+  html+='<div class="tf-details">';
+  html+='<div class="tf-row"><span>21/50 EMA</span><span style="color:'+(medTrend.ema1>medTrend.ema2?'#22c55e':'#ef4444')+'">'+(medTrend.ema1>medTrend.ema2?'Bullish':'Bearish')+'</span></div>';
+  html+='<div class="tf-row"><span>50/100 SMA</span><span style="color:'+(medTrend.sma1>medTrend.sma2?'#22c55e':'#ef4444')+'">'+(medTrend.sma1>medTrend.sma2?'Above':'Below')+'</span></div>';
+  html+='<div class="tf-row"><span>Structure</span><span style="color:'+(medTrend.structure.structure==='uptrend'?'#22c55e':medTrend.structure.structure==='downtrend'?'#ef4444':'#eab308')+'">'+medTrend.structure.structure.toUpperCase()+'</span></div>';
+  html+='</div></div>';
+
+  // Long-term card
+  var ltClass=longTrend.score>=30?'long':longTrend.score<=-30?'short':'';
+  html+='<div class="trend-tf '+ltClass+'">';
+  html+='<div class="tf-label">Long-Term (1-3 Months)</div>';
+  html+='<div class="tf-signal" style="color:'+longTrend.color+'">'+longTrend.direction+'</div>';
+  html+='<div class="tf-direction" style="color:'+longTrend.color+'">'+longTrend.signal+'</div>';
+  html+='<div class="tf-strength"><div class="tf-strength-label">Trend Strength: '+longTrend.strength.toFixed(0)+'%</div>';
+  html+='<div class="tf-strength-bar"><div class="tf-strength-fill" style="width:'+longTrend.strength+'%;background:'+longTrend.color+'"></div></div></div>';
+  html+='<div class="tf-details">';
+  html+='<div class="tf-row"><span>50/200 SMA</span><span style="color:'+(longTrend.sma1>longTrend.sma2?'#22c55e':'#ef4444')+'">'+(longTrend.sma1>longTrend.sma2?'Golden':'Death')+'</span></div>';
+  html+='<div class="tf-row"><span>Price/200MA</span><span style="color:'+(p.price>longTrend.sma2?'#22c55e':'#ef4444')+'">'+(p.price>longTrend.sma2?'Above':'Below')+'</span></div>';
+  html+='<div class="tf-row"><span>Structure</span><span style="color:'+(longTrend.structure.structure==='uptrend'?'#22c55e':longTrend.structure.structure==='downtrend'?'#ef4444':'#eab308')+'">'+longTrend.structure.structure.toUpperCase()+'</span></div>';
+  html+='</div></div>';
+
+  html+='</div>'; // end trend-grid
+
+  // Confluence bar
+  html+='<div class="trend-confluence">';
+  html+='<div class="conf-header"><span class="conf-title">Timeframe Confluence</span><span class="conf-value" style="color:'+biasColor+'">'+longCount+'/3 Long, '+shortCount+'/3 Short</span></div>';
+  html+='<div class="conf-bar">';
+  html+='<div class="conf-segment" style="background:'+(shortTrend.score>=30?'#22c55e':shortTrend.score<=-30?'#ef4444':'#334155')+';color:#fff">SHORT</div>';
+  html+='<div class="conf-segment" style="background:'+(medTrend.score>=30?'#22c55e':medTrend.score<=-30?'#ef4444':'#334155')+';color:#fff">MEDIUM</div>';
+  html+='<div class="conf-segment" style="background:'+(longTrend.score>=30?'#22c55e':longTrend.score<=-30?'#ef4444':'#334155')+';color:#fff">LONG</div>';
+  html+='</div>';
+
+  // Trade recommendation
+  var tradeRec,tradeNote;
+  if(longCount===3){
+    tradeRec='LONG with confidence - all timeframes aligned bullish';
+    tradeNote='Enter on pullbacks to 7 or 21 EMA. Stop below recent swing low.';
+  }else if(shortCount===3){
+    tradeRec='SHORT with confidence - all timeframes aligned bearish';
+    tradeNote='Enter on bounces to 7 or 21 EMA. Stop above recent swing high.';
+  }else if(longCount>=2&&shortCount===0){
+    tradeRec='LEAN LONG - majority bullish, wait for short-term alignment';
+    tradeNote='Wait for short-term to turn bullish for higher probability entry.';
+  }else if(shortCount>=2&&longCount===0){
+    tradeRec='LEAN SHORT - majority bearish, wait for short-term alignment';
+    tradeNote='Wait for short-term to turn bearish for higher probability entry.';
+  }else{
+    tradeRec='FLAT/WAIT - mixed signals, no clear direction';
+    tradeNote='Avoid new positions until timeframes align. Focus on risk management.';
+  }
+  html+='<div style="margin-top:10px;font-size:11px;color:#cbd5e1"><strong style="color:'+biasColor+'">'+tradeRec+'</strong><br><span style="color:#64748b">'+tradeNote+'</span></div>';
+  html+='</div>';
+
+  // Entry/Exit levels
+  html+='<div class="trend-action">';
+  if(trendScore>0){
+    html+='<div class="trend-action-box"><div class="tab-label">Long Entry Zone</div><div class="tab-value" style="color:#22c55e">'+fp(shortTrend.ema2)+' - '+fp(shortTrend.ema1)+'</div><div class="tab-note">21 EMA to 7 EMA pullback zone</div></div>';
+    html+='<div class="trend-action-box"><div class="tab-label">Stop Loss Level</div><div class="tab-value" style="color:#ef4444">'+fp(medTrend.sma1*0.97)+'</div><div class="tab-note">3% below 50 SMA ('+fp(medTrend.sma1)+')</div></div>';
+  }else if(trendScore<0){
+    html+='<div class="trend-action-box"><div class="tab-label">Short Entry Zone</div><div class="tab-value" style="color:#ef4444">'+fp(shortTrend.ema1)+' - '+fp(shortTrend.ema2)+'</div><div class="tab-note">7 EMA to 21 EMA bounce zone</div></div>';
+    html+='<div class="trend-action-box"><div class="tab-label">Stop Loss Level</div><div class="tab-value" style="color:#22c55e">'+fp(medTrend.sma1*1.03)+'</div><div class="tab-note">3% above 50 SMA ('+fp(medTrend.sma1)+')</div></div>';
+  }else{
+    html+='<div class="trend-action-box"><div class="tab-label">Neutral Zone</div><div class="tab-value" style="color:#eab308">Wait for Direction</div><div class="tab-note">No clear trend - avoid new positions</div></div>';
+    html+='<div class="trend-action-box"><div class="tab-label">Key Level to Watch</div><div class="tab-value" style="color:#eab308">'+fp(medTrend.sma1)+'</div><div class="tab-note">50 SMA - break above/below signals direction</div></div>';
+  }
+  html+='</div>';
+
+  html+='</div>'; // end trend-master
 
   // ═══════ PRICE ACTION PANEL ═══════
   html+='<div class="price-action">';
