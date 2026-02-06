@@ -129,19 +129,36 @@ function fetchHR(){
     var m3=s3/l3.length,m6=s6/l6.length,r={ma30:m3,ma60:m6,cap:m3<m6};C.set('hr',r);return{ma30:m3,ma60:m6,cap:r.cap,src:'Mempool.space'}
   }).catch(function(){var f=C.any('hr');return f?{ma30:f.value.ma30,ma60:f.value.ma60,cap:f.value.cap,src:'Cached',stale:true,ct:f.ts}:{ma30:0,ma60:0,cap:false,src:'N/A',err:true}})
 }
+// ═══════ CBBI API (Real Puell Multiple) ═══════
+function fetchCBBI(){
+  var c=C.get('cbbi',3600000);if(c&&!c.stale)return Promise.resolve({puell:c.value.puell,mvrv:c.value.mvrv,confidence:c.value.confidence,src:'Cached'});
+  return fj('https://colintalkscrypto.com/cbbi/data/latest.json',15000).then(function(d){
+    // Get latest values from each metric
+    function getLatest(obj){var keys=Object.keys(obj).map(Number).sort(function(a,b){return b-a});return obj[keys[0]];}
+    var puell=getLatest(d.Puell);
+    var mvrv=getLatest(d.MVRV);
+    var confidence=getLatest(d.Confidence);
+    var r={puell:puell,mvrv:mvrv,confidence:confidence};
+    C.set('cbbi',r);
+    return{puell:puell,mvrv:mvrv,confidence:confidence,src:'CBBI'};
+  }).catch(function(){var f=C.any('cbbi');return f?{puell:f.value.puell,mvrv:f.value.mvrv,confidence:f.value.confidence,src:'Cached',stale:true,ct:f.ts}:{puell:0.5,mvrv:0.5,confidence:0.5,src:'N/A',err:true}})
+}
 
 // ═══════ CALC ═══════
 function eMVRV(p,ma){if(!ma||ma<=0)return 0;var r=p/ma;if(r<0.7)return-0.5+(r-0.7)*2;if(r<1)return(r-1)*2.5;if(r<1.5)return(r-1)*3;if(r<2.5)return 1.5+(r-1.5)*2;return 3.5+(r-2.5)*1.5}
 function eRP(p,ma){if(!ma||ma<=0)return 0;var r=p/ma,m;if(r<1)m=1.02;else if(r<1.5)m=1.05+((r-1)*0.1);else if(r<2.5)m=1.1+((r-1.5)*0.08);else m=1.2;return ma*m}
-function cPuell(p){return(450*p)/(450*p*0.85)||1}
-function score(mv,pma,prp,fg,fr,pu,hc,maLoaded){
+// Convert CBBI normalized Puell (0-1) to traditional Puell scale for display
+function cbbiToTraditionalPuell(cbbiPuell){return cbbiPuell<0.5?cbbiPuell*1.0:(0.5+(cbbiPuell-0.5)*7.0)}
+function score(mv,pma,prp,fg,fr,cbbiPuell,hc,maLoaded,cbbiLoaded){
   var s=0,b=[];
   var mp=maLoaded?(mv<0?40:mv<1?30:mv<1.5?20:mv<2.5?10:0):0;s+=mp;b.push({n:'MVRV Z-Score (Est.)',v:maLoaded?mv.toFixed(2):'Waiting...',p:mp,m:40,bg:'EST 92%'});
   var maPct=pma*100,maP=maLoaded?(maPct<=100?30:maPct<=110?20:maPct<=130?10:0):0;s+=maP;b.push({n:'Price vs 200W MA',v:maLoaded?maPct.toFixed(1)+'%':'Waiting...',p:maP,m:30});
   var rpPct=prp*100,rpP=maLoaded?(rpPct<=100?30:rpPct<=110?20:rpPct<=130?10:0):0;s+=rpP;b.push({n:'Price vs Realized Price (Est.)',v:maLoaded?rpPct.toFixed(1)+'%':'Waiting...',p:rpP,m:30,bg:'EST 94%'});
   var fP=fg<20?10:0;s+=fP;b.push({n:'Fear & Greed Index',v:''+fg,p:fP,m:10});
   var frP=fr<0?10:0;s+=frP;b.push({n:'Funding Rate',v:(fr*100).toFixed(4)+'%',p:frP,m:10});
-  var puP=pu<0.5?10:0;s+=puP;b.push({n:'Puell Multiple',v:pu.toFixed(2),p:puP,m:10});
+  // CBBI Puell: < 0.3 = buy zone (miner stress), display as traditional scale
+  var tradPuell=cbbiLoaded?cbbiToTraditionalPuell(cbbiPuell):0.5;
+  var puP=cbbiLoaded?(cbbiPuell<0.3?10:cbbiPuell<0.4?5:0):0;s+=puP;b.push({n:'Puell Multiple',v:cbbiLoaded?tradPuell.toFixed(2):'Loading...',p:puP,m:10,bg:'CBBI'});
   var hP=hc?10:0;s+=hP;b.push({n:'Hash Ribbons',v:hc?'Capitulation':'Recovery',p:hP,m:10});
   return{s:s,b:b}
 }
@@ -177,14 +194,15 @@ function buildGauge(sc){
 }
 
 // ═══════ RENDER ═══════
-var state={price:{price:0,src:''},ma:{ma:0,wp:[]},fg:{val:50,txt:'Neutral'},fr:{rate:0},hr:{cap:false},lastUp:null,countdown:60};
+var state={price:{price:0,src:''},ma:{ma:0,wp:[]},fg:{val:50,txt:'Neutral'},fr:{rate:0},hr:{cap:false},cbbi:{puell:0.5,mvrv:0.5,confidence:0.5,src:''},lastUp:null,countdown:60};
 
 function render(){
-  var p=state.price,ma=state.ma,fg=state.fg,fr=state.fr,hr=state.hr;
-  var mvrv=eMVRV(p.price,ma.ma),rp=eRP(p.price,ma.ma),puell=cPuell(p.price);
+  var p=state.price,ma=state.ma,fg=state.fg,fr=state.fr,hr=state.hr,cbbi=state.cbbi;
+  var mvrv=eMVRV(p.price,ma.ma),rp=eRP(p.price,ma.ma);
   var pma=ma.ma>0?p.price/ma.ma:0,prp=rp>0?p.price/rp:0;
   var maLoaded=ma.ma>0;
-  var res=score(mvrv,pma,prp,fg.val,fr.rate,puell,hr.cap,maLoaded),sc=res.s,bd=res.b,si=sig(sc);
+  var cbbiLoaded=cbbi.src&&cbbi.src!=='N/A';
+  var res=score(mvrv,pma,prp,fg.val,fr.rate,cbbi.puell,hr.cap,maLoaded,cbbiLoaded),sc=res.s,bd=res.b,si=sig(sc);
 
   var mvSt=!maLoaded?['Loading 200WMA...','#64748b']:mvrv<0?['EXTREME BUY ZONE','#22c55e']:mvrv<1?['Strong buy zone','#22c55e']:mvrv<1.5?['Approaching buy','#eab308']:mvrv<2.5?['Neutral','#94a3b8']:['Overheated','#ef4444'];
   var maSt=!maLoaded?['Loading...','#64748b']:pma*100<=100?['AT/BELOW MA','#22c55e']:pma*100<=110?['Near MA','#22c55e']:pma*100<=130?['Moderate','#eab308']:['Far above MA','#ef4444'];
@@ -209,7 +227,7 @@ function render(){
   html+=cardHTML('Realized Price',fp(rp),bd[2].p,30,rpSt[0],rpSt[1],'EST 94%','Price is '+(prp*100).toFixed(1)+'% of RP');
   html+=cardHTML('Fear & Greed',fg.val+' - '+fg.txt,bd[3].p,10,fgSt[0],fgSt[1],'','< 20 = Extreme Fear (Buy Signal)');
   html+=cardHTML('Funding Rate',(fr.rate*100).toFixed(4)+'%',bd[4].p,10,fr.rate<0?'Negative (Buy)':'Positive',fr.rate<0?'#22c55e':'#94a3b8','','Negative = shorts paying longs');
-  html+=cardHTML('Puell Multiple',puell.toFixed(2),bd[5].p,10,puell<0.5?'Miner Stress':'Normal',puell<0.5?'#22c55e':'#94a3b8','','< 0.5 = extreme miner stress');
+  var tradPuellDisp=cbbiLoaded?cbbiToTraditionalPuell(cbbi.puell):0.5;html+=cardHTML('Puell Multiple',cbbiLoaded?tradPuellDisp.toFixed(2):'Loading...',bd[5].p,10,cbbiLoaded?(cbbi.puell<0.3?'Buy Zone (Miner Stress)':cbbi.puell<0.5?'Miner Stress':'Normal'):'Loading...',cbbiLoaded?(cbbi.puell<0.3?'#22c55e':cbbi.puell<0.5?'#eab308':'#94a3b8'):'#64748b','CBBI','< 0.3 = buy zone (miner stress)');
   html+=cardHTML('Hash Ribbons',hr.cap?'CAPITULATION':'Recovery',bd[6].p,10,hr.cap?'Miner Capitulation':'Healthy',hr.cap?'#22c55e':'#94a3b8','','30MA '+(hr.cap?'<':'>')+' 60MA');
   html+='<div class="card" style="display:flex;flex-direction:column;align-items:center;justify-content:center"><div class="name" style="margin-bottom:8px">Total Score</div><div style="font-size:28px;font-weight:bold;color:'+si.c+'">'+sc+'/140</div><div style="font-size:11px;color:'+si.c+';margin-top:2px">'+si.l+'</div><div class="bar-bg" style="margin-top:10px;width:100%"><div class="bar-fill" style="width:'+(sc/140*100)+'%;background:'+si.c+'"></div></div></div>';
   html+='</div>';
@@ -232,7 +250,7 @@ function render(){
   for(var i=0;i<hist.length;i++){html+='<div class="hist-row"><span class="d">'+hist[i].d+': Score '+hist[i].s+'</span><span class="r">'+hist[i].r+' rally</span></div>'}
   html+='<div style="margin-top:8px;padding:8px;background:rgba(30,41,59,0.3);border-radius:4px;font-size:9px;color:#64748b">Accuracy: 95%+ for calling cycle bottoms. Uses ESTIMATED on-chain data (92-94% accurate). For 100% accuracy, use paid APIs.</div></div></div>';
   // Footer
-  html+='<div class="card"><div class="section-title">Data Sources (All Free, No Signup)</div><div class="footer-section"><div>\u2022 BTC Price: Binance API (30s)</div><div>\u2022 200-Week MA: CoinGecko (24h)</div><div>\u2022 MVRV Z-Score: Estimation (92%)</div><div>\u2022 Realized Price: Estimation (94%)</div><div>\u2022 Fear & Greed: Alternative.me</div><div>\u2022 Funding Rate: Binance Futures</div><div>\u2022 Puell Multiple: Calculated</div><div>\u2022 Hash Ribbons: Mempool.space</div></div>';
+  html+='<div class="card"><div class="section-title">Data Sources (All Free, No Signup)</div><div class="footer-section"><div>\u2022 BTC Price: Binance API (30s)</div><div>\u2022 200-Week MA: CoinGecko (24h)</div><div>\u2022 MVRV Z-Score: Estimation (92%)</div><div>\u2022 Realized Price: Estimation (94%)</div><div>\u2022 Fear & Greed: Alternative.me</div><div>\u2022 Funding Rate: Binance Futures</div><div>\u2022 Puell Multiple: CBBI API</div><div>\u2022 Hash Ribbons: Mempool.space</div></div>';
   html+='<div class="warn-box warn-yellow">\u26A0\uFE0F MVRV and Realized Price are ESTIMATES. Validated against all historical cycle bottoms with 92-94% accuracy. For 100% precision, use Glassnode (requires signup).</div>';
   html+='<div class="warn-box warn-red">\u26A0\uFE0F DISCLAIMER: Educational purposes only. Not financial advice. DYOR. Past performance does not guarantee future results.</div>';
   html+='<div style="text-align:center;font-size:9px;color:#475569;margin-top:8px">Bitcoin Bottom Indicator Dashboard \u2022 Open Source \u2022 No API Keys Required</div></div>';
@@ -244,8 +262,8 @@ function render(){
 
 // ═══════ INIT ═══════
 function fetchAll(){
-  return Promise.all([fetchPrice(),fetchMA(),fetchFG(),fetchFR(),fetchHR()].map(function(p){return p.catch(function(e){return null})})).then(function(r){
-    if(r[0])state.price=r[0];if(r[1])state.ma=r[1];if(r[2])state.fg=r[2];if(r[3])state.fr=r[3];if(r[4])state.hr=r[4];
+  return Promise.all([fetchPrice(),fetchMA(),fetchFG(),fetchFR(),fetchHR(),fetchCBBI()].map(function(p){return p.catch(function(e){return null})})).then(function(r){
+    if(r[0])state.price=r[0];if(r[1])state.ma=r[1];if(r[2])state.fg=r[2];if(r[3])state.fr=r[3];if(r[4])state.hr=r[4];if(r[5])state.cbbi=r[5];
     state.lastUp=Date.now();state.countdown=60;render();
   });
 }
