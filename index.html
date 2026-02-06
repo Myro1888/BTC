@@ -30,12 +30,18 @@ body{background:#0f172a;color:#e2e8f0;font-family:-apple-system,BlinkMacSystemFo
 .main-panel .alloc-box,.sell-panel .alloc-box{text-align:center}
 .main-panel .alloc-box .val,.sell-panel .alloc-box .val{font-size:clamp(18px,4vw,28px);font-weight:bold}
 .main-panel .alloc-box .note,.sell-panel .alloc-box .note{font-size:9px;color:#64748b;margin-top:2px}
-.trend-panel{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}
-.trend-card{background:#1e293b;border:1px solid #334155;border-radius:8px;padding:14px;text-align:center}
-.trend-card .period{font-size:9px;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px}
-.trend-card .arrow{font-size:24px;margin-bottom:4px}
-.trend-card .change{font-size:14px;font-weight:bold}
-.trend-card .label{font-size:10px;margin-top:2px}
+.trend-panel{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px}
+.trend-card{background:#1e293b;border:1px solid #334155;border-radius:8px;padding:16px}
+.trend-card .period{font-size:10px;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;font-weight:bold}
+.trend-card .indicators{display:flex;flex-direction:column;gap:8px}
+.trend-card .ind-row{display:flex;justify-content:space-between;align-items:center}
+.trend-card .ind-label{font-size:10px;color:#64748b}
+.trend-card .ind-value{font-size:12px;font-weight:bold}
+.trend-card .trend-signal{text-align:center;padding:8px;border-radius:6px;margin-top:8px}
+.trend-card .trend-signal .dir{font-size:20px}
+.trend-card .trend-signal .txt{font-size:11px;font-weight:bold}
+.rsi-bar{height:8px;background:linear-gradient(90deg,#22c55e 0%,#22c55e 30%,#eab308 30%,#eab308 70%,#ef4444 70%,#ef4444 100%);border-radius:4px;position:relative;margin-top:4px}
+.rsi-marker{position:absolute;top:-2px;width:4px;height:12px;background:#fff;border-radius:2px;transform:translateX(-50%)}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;margin-bottom:16px}
 .card{background:#1e293b;border:1px solid #334155;border-radius:8px;padding:14px}
 .card:hover{border-color:#3b82f6}
@@ -168,6 +174,119 @@ function fetchHR(){
   }).catch(function(){var f=C.any('hr');return f?{ma30:f.value.ma30,ma60:f.value.ma60,cap:f.value.cap,src:'Cached',stale:true,ct:f.ts}:{ma30:0,ma60:0,cap:false,src:'N/A',err:true}})
 }
 
+// ═══════ DAILY PRICE DATA FOR TECHNICAL ANALYSIS ═══════
+function fetchDaily(){
+  var c=C.get('daily',3600000);if(c&&!c.stale)return Promise.resolve(c.value);
+  // Fetch 365 days of daily data from Binance
+  return fj('https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1d&limit=365',15000).then(function(data){
+    if(!data||data.length<200)throw new Error('insufficient daily data');
+    // Extract close prices
+    var closes=data.map(function(k){return parseFloat(k[4])});
+    // Calculate EMAs
+    var ema7=calcEMA(closes,7);
+    var ema21=calcEMA(closes,21);
+    var sma50=calcSMA(closes,50);
+    var sma200=calcSMA(closes,200);
+    // Calculate RSI
+    var rsi=calcRSI(closes,14);
+    // Detect Golden/Death Cross
+    var cross=detectCross(closes,50,200);
+    // Get recent values
+    var current=closes[closes.length-1];
+    var result={
+      price:current,
+      ema7:ema7[ema7.length-1],
+      ema21:ema21[ema21.length-1],
+      sma50:sma50[sma50.length-1],
+      sma200:sma200[sma200.length-1],
+      rsi:rsi[rsi.length-1],
+      cross:cross,
+      // Previous values for trend
+      ema7Prev:ema7[ema7.length-2],
+      ema21Prev:ema21[ema21.length-2],
+      sma50Prev:sma50[sma50.length-2]||sma50[sma50.length-1],
+      pricePrev:closes[closes.length-2],
+      // Weekly change (7 days ago)
+      price7d:closes[closes.length-8]||closes[0],
+      // Monthly change (30 days ago)
+      price30d:closes[closes.length-31]||closes[0],
+      // Quarterly change (90 days ago)
+      price90d:closes[closes.length-91]||closes[0],
+      src:'Binance'
+    };
+    C.set('daily',result);
+    return result;
+  }).catch(function(){
+    var f=C.any('daily');
+    if(f)return f.value;
+    return{price:0,ema7:0,ema21:0,sma50:0,sma200:0,rsi:50,cross:'none',ema7Prev:0,ema21Prev:0,sma50Prev:0,pricePrev:0,price7d:0,price30d:0,price90d:0,src:'N/A',err:true};
+  });
+}
+
+// Calculate Simple Moving Average
+function calcSMA(data,period){
+  var result=[];
+  for(var i=0;i<data.length;i++){
+    if(i<period-1){result.push(null);continue;}
+    var sum=0;
+    for(var j=0;j<period;j++)sum+=data[i-j];
+    result.push(sum/period);
+  }
+  return result;
+}
+
+// Calculate Exponential Moving Average
+function calcEMA(data,period){
+  var result=[];
+  var mult=2/(period+1);
+  var ema=data[0];
+  for(var i=0;i<data.length;i++){
+    if(i===0){result.push(data[0]);continue;}
+    ema=(data[i]-ema)*mult+ema;
+    result.push(ema);
+  }
+  return result;
+}
+
+// Calculate RSI (Relative Strength Index)
+function calcRSI(data,period){
+  var result=[];
+  var gains=[],losses=[];
+  for(var i=1;i<data.length;i++){
+    var change=data[i]-data[i-1];
+    gains.push(change>0?change:0);
+    losses.push(change<0?-change:0);
+  }
+  for(var i=0;i<gains.length;i++){
+    if(i<period-1){result.push(50);continue;}
+    var avgGain=0,avgLoss=0;
+    for(var j=0;j<period;j++){avgGain+=gains[i-j];avgLoss+=losses[i-j];}
+    avgGain/=period;avgLoss/=period;
+    if(avgLoss===0){result.push(100);continue;}
+    var rs=avgGain/avgLoss;
+    result.push(100-(100/(1+rs)));
+  }
+  return result;
+}
+
+// Detect Golden Cross / Death Cross
+function detectCross(data,shortPeriod,longPeriod){
+  var shortMA=calcSMA(data,shortPeriod);
+  var longMA=calcSMA(data,longPeriod);
+  var len=data.length;
+  if(!shortMA[len-1]||!longMA[len-1]||!shortMA[len-2]||!longMA[len-2])return'none';
+  var currAbove=shortMA[len-1]>longMA[len-1];
+  var prevAbove=shortMA[len-2]>longMA[len-2];
+  // Check last 30 days for recent cross
+  for(var i=len-1;i>=len-30&&i>longPeriod;i--){
+    var above=shortMA[i]>longMA[i];
+    var prevA=shortMA[i-1]>longMA[i-1];
+    if(above&&!prevA)return'golden'; // 50 crossed above 200
+    if(!above&&prevA)return'death';  // 50 crossed below 200
+  }
+  return currAbove?'bullish':'bearish';
+}
+
 // ═══════ CALCULATION FUNCTIONS ═══════
 // MVRV Z-Score estimation (unchanged - proven accurate)
 function eMVRV(p,ma){if(!ma||ma<=0)return 0;var r=p/ma;if(r<0.7)return-0.75+(r-0.7)*2;if(r<1)return(r-1)*2.5;if(r<1.5)return(r-1)*3;if(r<2.5)return 1.5+(r-1.5)*2;return 3.5+(r-2.5)*1.5}
@@ -294,14 +413,15 @@ function buildGauge(sc,max,color){
 }
 
 // ═══════ RENDER ═══════
-var state={price:{price:0,src:''},ma:{ma:0,ma2y:0,ma90d:0,ma30d:0,ma7d:0,wp:[]},fg:{val:50,txt:'Neutral'},fr:{rate:0},hr:{cap:false},lastUp:null,countdown:60};
+var state={price:{price:0,src:''},ma:{ma:0,ma2y:0,ma90d:0,ma30d:0,ma7d:0,wp:[]},fg:{val:50,txt:'Neutral'},fr:{rate:0},hr:{cap:false},daily:{price:0,ema7:0,ema21:0,sma50:0,sma200:0,rsi:50,cross:'none',price7d:0,price30d:0,price90d:0},lastUp:null,countdown:60};
 
 function render(){
-  var p=state.price,ma=state.ma,fg=state.fg,fr=state.fr,hr=state.hr;
+  var p=state.price,ma=state.ma,fg=state.fg,fr=state.fr,hr=state.hr,daily=state.daily;
   var mvrv=eMVRV(p.price,ma.ma),rp=eRP(p.price,ma.ma),puell=cPuell(p.price,ma.wp);
   var mult2y=calc2YMult(p.price,ma.ma2y||ma.ma);
   var pma=ma.ma>0?p.price/ma.ma:0,prp=rp>0?p.price/rp:0;
   var maLoaded=ma.ma>0;
+  var dailyLoaded=daily.ema7>0;
   var cbbi=calcCBBI(mvrv,puell,pma,fg.val,mult2y);
 
   // Calculate scores
@@ -309,11 +429,20 @@ function render(){
   var sellRes=scoreSell(mvrv,pma,fg.val,puell,cbbi,mult2y,maLoaded);
   var buySig=sigBuy(buyRes.s),sellSig=sigSell(sellRes.s);
 
-  // Calculate trends
-  var trend7=calcTrend(p.price,ma.ma7d||ma.ma);
-  var trend30=calcTrend(p.price,ma.ma30d||ma.ma);
-  var trend90=calcTrend(p.price,ma.ma90d||ma.ma);
-  var trend200w=calcTrend(p.price,ma.ma);
+  // Price Action Analysis from Daily Data
+  var rsi=daily.rsi||50;
+  var rsiStatus=rsi<30?['OVERSOLD','#22c55e']:rsi<45?['Weak','#eab308']:rsi<55?['Neutral','#94a3b8']:rsi<70?['Strong','#f97316']:['OVERBOUGHT','#ef4444'];
+  // EMA alignment for short-term trend
+  var emaAlign=dailyLoaded?(p.price>daily.ema7&&daily.ema7>daily.ema21?'bullish':p.price<daily.ema7&&daily.ema7<daily.ema21?'bearish':'neutral'):'loading';
+  // 50/200 MA structure for medium-term
+  var maStructure=dailyLoaded?(daily.sma50>daily.sma200?'bullish':'bearish'):'loading';
+  // Price changes
+  var chg7d=daily.price7d>0?((p.price-daily.price7d)/daily.price7d)*100:0;
+  var chg30d=daily.price30d>0?((p.price-daily.price30d)/daily.price30d)*100:0;
+  var chg90d=daily.price90d>0?((p.price-daily.price90d)/daily.price90d)*100:0;
+  // Cross status
+  var crossStatus=daily.cross||'none';
+  var crossLabel=crossStatus==='golden'?['GOLDEN CROSS','#22c55e']:crossStatus==='death'?['DEATH CROSS','#ef4444']:crossStatus==='bullish'?['50 > 200','#22c55e']:crossStatus==='bearish'?['50 < 200','#ef4444']:['Loading','#64748b'];
 
   // Status labels
   var mvSt=!maLoaded?['Loading...','#64748b']:mvrv<0?['EXTREME BUY','#22c55e']:mvrv<1?['Strong buy','#22c55e']:mvrv<1.5?['Approaching buy','#eab308']:mvrv<2.5?['Neutral','#94a3b8']:mvrv<5?['Caution','#f97316']:['SELL ZONE','#ef4444'];
@@ -327,12 +456,44 @@ function render(){
   // Header
   html+='<div class="header"><h1>Bitcoin Investment Indicator Dashboard</h1><p class="sub">Buy & Sell Signals \u2022 100% Free \u2022 Real-Time Data</p><div class="meta"><span>Last update: '+ft(state.lastUp)+'</span><span>\u2022</span><span>Next refresh: '+state.countdown+'s</span><span>\u2022</span><span>Price: '+p.src+'</span></div></div>';
 
-  // Price Trend Panel
+  // Price Action Panel - Short/Medium/Long Term
   html+='<div class="trend-panel">';
-  html+='<div class="trend-card"><div class="period">Weekly Trend</div><div class="arrow" style="color:'+trend7.color+'">'+trend7.dir+'</div><div class="change" style="color:'+trend7.color+'">'+(trend7.pct>=0?'+':'')+trend7.pct.toFixed(1)+'%</div><div class="label" style="color:'+trend7.color+'">'+trend7.label+'</div></div>';
-  html+='<div class="trend-card"><div class="period">Monthly Trend</div><div class="arrow" style="color:'+trend30.color+'">'+trend30.dir+'</div><div class="change" style="color:'+trend30.color+'">'+(trend30.pct>=0?'+':'')+trend30.pct.toFixed(1)+'%</div><div class="label" style="color:'+trend30.color+'">'+trend30.label+'</div></div>';
-  html+='<div class="trend-card"><div class="period">Quarterly Trend</div><div class="arrow" style="color:'+trend90.color+'">'+trend90.dir+'</div><div class="change" style="color:'+trend90.color+'">'+(trend90.pct>=0?'+':'')+trend90.pct.toFixed(1)+'%</div><div class="label" style="color:'+trend90.color+'">'+trend90.label+'</div></div>';
-  html+='<div class="trend-card"><div class="period">vs 200W MA</div><div class="arrow" style="color:'+trend200w.color+'">'+trend200w.dir+'</div><div class="change" style="color:'+trend200w.color+'">'+(trend200w.pct>=0?'+':'')+trend200w.pct.toFixed(1)+'%</div><div class="label" style="color:'+trend200w.color+'">'+trend200w.label+'</div></div>';
+
+  // SHORT-TERM (Daily)
+  var shortColor=emaAlign==='bullish'?'#22c55e':emaAlign==='bearish'?'#ef4444':'#eab308';
+  var shortDir=emaAlign==='bullish'?'↑':emaAlign==='bearish'?'↓':'→';
+  var shortLabel=emaAlign==='bullish'?'BULLISH':emaAlign==='bearish'?'BEARISH':'NEUTRAL';
+  html+='<div class="trend-card"><div class="period">Short-Term (Daily)</div><div class="indicators">';
+  html+='<div class="ind-row"><span class="ind-label">RSI (14)</span><span class="ind-value" style="color:'+rsiStatus[1]+'">'+rsi.toFixed(1)+' '+rsiStatus[0]+'</span></div>';
+  html+='<div class="rsi-bar"><div class="rsi-marker" style="left:'+rsi+'%"></div></div>';
+  html+='<div class="ind-row"><span class="ind-label">7 EMA</span><span class="ind-value">'+fp(daily.ema7)+'</span></div>';
+  html+='<div class="ind-row"><span class="ind-label">21 EMA</span><span class="ind-value">'+fp(daily.ema21)+'</span></div>';
+  html+='<div class="ind-row"><span class="ind-label">7D Change</span><span class="ind-value" style="color:'+(chg7d>=0?'#22c55e':'#ef4444')+'">'+(chg7d>=0?'+':'')+chg7d.toFixed(1)+'%</span></div>';
+  html+='</div><div class="trend-signal" style="background:'+shortColor+'20;border:1px solid '+shortColor+'"><div class="dir" style="color:'+shortColor+'">'+shortDir+'</div><div class="txt" style="color:'+shortColor+'">'+shortLabel+'</div></div></div>';
+
+  // MEDIUM-TERM (Weekly)
+  var medColor=maStructure==='bullish'?'#22c55e':'#ef4444';
+  var medDir=maStructure==='bullish'?'↑':'↓';
+  var medLabel=maStructure==='bullish'?'BULLISH':'BEARISH';
+  html+='<div class="trend-card"><div class="period">Medium-Term (Weekly)</div><div class="indicators">';
+  html+='<div class="ind-row"><span class="ind-label">50 SMA</span><span class="ind-value">'+fp(daily.sma50)+'</span></div>';
+  html+='<div class="ind-row"><span class="ind-label">200 SMA</span><span class="ind-value">'+fp(daily.sma200)+'</span></div>';
+  html+='<div class="ind-row"><span class="ind-label">MA Cross</span><span class="ind-value" style="color:'+crossLabel[1]+'">'+crossLabel[0]+'</span></div>';
+  html+='<div class="ind-row"><span class="ind-label">30D Change</span><span class="ind-value" style="color:'+(chg30d>=0?'#22c55e':'#ef4444')+'">'+(chg30d>=0?'+':'')+chg30d.toFixed(1)+'%</span></div>';
+  html+='</div><div class="trend-signal" style="background:'+medColor+'20;border:1px solid '+medColor+'"><div class="dir" style="color:'+medColor+'">'+medDir+'</div><div class="txt" style="color:'+medColor+'">'+medLabel+'</div></div></div>';
+
+  // LONG-TERM (Monthly)
+  var longPct=ma.ma>0?((p.price-ma.ma)/ma.ma)*100:0;
+  var longColor=longPct>0?'#22c55e':'#ef4444';
+  var longDir=longPct>10?'↑':longPct<-10?'↓':'→';
+  var longLabel=longPct>50?'STRONG BULL':longPct>0?'BULL MARKET':longPct>-30?'BEAR MARKET':'DEEP BEAR';
+  html+='<div class="trend-card"><div class="period">Long-Term (Monthly)</div><div class="indicators">';
+  html+='<div class="ind-row"><span class="ind-label">200W MA</span><span class="ind-value">'+fp(ma.ma)+'</span></div>';
+  html+='<div class="ind-row"><span class="ind-label">Price/200WMA</span><span class="ind-value" style="color:'+longColor+'">'+(pma*100).toFixed(1)+'%</span></div>';
+  html+='<div class="ind-row"><span class="ind-label">90D Change</span><span class="ind-value" style="color:'+(chg90d>=0?'#22c55e':'#ef4444')+'">'+(chg90d>=0?'+':'')+chg90d.toFixed(1)+'%</span></div>';
+  html+='<div class="ind-row"><span class="ind-label">Cycle Position</span><span class="ind-value">CBBI '+cbbi+'%</span></div>';
+  html+='</div><div class="trend-signal" style="background:'+longColor+'20;border:1px solid '+longColor+'"><div class="dir" style="color:'+longColor+'">'+longDir+'</div><div class="txt" style="color:'+longColor+'">'+longLabel+'</div></div></div>';
+
   html+='</div>';
 
   // Dual Panel - Buy and Sell
@@ -426,8 +587,8 @@ function render(){
 
 // ═══════ INIT ═══════
 function fetchAll(){
-  return Promise.all([fetchPrice(),fetchMA(),fetchFG(),fetchFR(),fetchHR()].map(function(p){return p.catch(function(e){return null})})).then(function(r){
-    if(r[0])state.price=r[0];if(r[1])state.ma=r[1];if(r[2])state.fg=r[2];if(r[3])state.fr=r[3];if(r[4])state.hr=r[4];
+  return Promise.all([fetchPrice(),fetchMA(),fetchFG(),fetchFR(),fetchHR(),fetchDaily()].map(function(p){return p.catch(function(e){return null})})).then(function(r){
+    if(r[0])state.price=r[0];if(r[1])state.ma=r[1];if(r[2])state.fg=r[2];if(r[3])state.fr=r[3];if(r[4])state.hr=r[4];if(r[5])state.daily=r[5];
     state.lastUp=Date.now();state.countdown=60;render();
   });
 }
