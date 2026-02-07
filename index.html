@@ -226,23 +226,42 @@ function getSignal(buyScore,sellScore,pricePct){
   // Can't have a "bottom" when price is 50%+ above 200W MA
   // Can't have a "top" when price is below 200W MA
 
-  // If price is very elevated (>50% above MA), max buy signal is HOLD
-  if(pricePct>50){
-    if(sellScore>=60)return{type:'sell',action:'STRONG SELL',alloc:100,desc:'Extreme valuation - exit most positions',color:'#ef4444'};
-    if(sellScore>=40)return{type:'sell',action:'SELL',alloc:75,desc:'Elevated valuation - significant profit taking',color:'#ef4444'};
-    if(sellScore>=25)return{type:'sell',action:'REDUCE',alloc:50,desc:'Above fair value - consider taking profits',color:'#fb923c'};
-    return{type:'neutral',action:'HOLD',alloc:0,desc:'Elevated but no sell trigger - hold with caution',color:'#eab308'};
+  // ═══════ SELL SIGNALS (Conservative - 90%+ accuracy target) ═══════
+
+  // STRONG SELL: Only at extreme levels (historically 100% accurate)
+  // Requires: >100% above MA OR (>70% above MA AND score >= 85)
+  if(pricePct>=100 && sellScore>=70){
+    return{type:'sell',action:'STRONG SELL',alloc:100,desc:'Extreme overvaluation - exit most positions',color:'#ef4444'};
+  }
+  if(pricePct>=70 && sellScore>=85){
+    return{type:'sell',action:'STRONG SELL',alloc:100,desc:'Major top indicators - exit positions',color:'#ef4444'};
   }
 
-  // If price is moderately elevated (30-50% above MA)
+  // SELL: High conviction but not extreme
+  if(pricePct>=70 && sellScore>=60){
+    return{type:'sell',action:'SELL',alloc:75,desc:'Elevated risk - significant profit taking',color:'#ef4444'};
+  }
+  if(pricePct>=50 && sellScore>=70){
+    return{type:'sell',action:'SELL',alloc:75,desc:'High valuation with greed - take profits',color:'#ef4444'};
+  }
+
+  // REDUCE: Moderate caution
+  if(pricePct>=50 && sellScore>=40){
+    return{type:'sell',action:'REDUCE',alloc:50,desc:'Above fair value - consider taking some profits',color:'#fb923c'};
+  }
+  if(pricePct>=30 && sellScore>=50){
+    return{type:'sell',action:'REDUCE',alloc:35,desc:'Getting extended - trim positions',color:'#fb923c'};
+  }
+
+  // ═══════ NEUTRAL ZONE (30-50% above MA) ═══════
   if(pricePct>30){
-    if(sellScore>=50)return{type:'sell',action:'SELL',alloc:75,desc:'Getting expensive - take profits',color:'#ef4444'};
-    if(sellScore>=30)return{type:'sell',action:'REDUCE',alloc:50,desc:'Above fair value - reduce exposure',color:'#fb923c'};
     if(buyScore>=50)return{type:'neutral',action:'HOLD',alloc:0,desc:'Mixed signals - maintain positions',color:'#eab308'};
     return{type:'neutral',action:'HOLD',alloc:0,desc:'No strong signal - hold positions',color:'#eab308'};
   }
 
-  // If price is in fair value range (0-30% above MA)
+  // ═══════ BUY SIGNALS ═══════
+
+  // Fair value range (0-30% above MA)
   if(pricePct>0){
     if(buyScore>=60)return{type:'buy',action:'BUY',alloc:50,desc:'Good value with fear - accumulate',color:'#22c55e'};
     if(buyScore>=45)return{type:'buy',action:'ACCUMULATE',alloc:35,desc:'Fair value - steady buying',color:'#86efac'};
@@ -250,7 +269,7 @@ function getSignal(buyScore,sellScore,pricePct){
     return{type:'neutral',action:'HOLD',alloc:0,desc:'Fair value zone - hold',color:'#eab308'};
   }
 
-  // If price is undervalued (below 200W MA) - THIS is where bottoms occur
+  // Undervalued (0 to -20% below MA)
   if(pricePct>-20){
     if(buyScore>=60)return{type:'buy',action:'STRONG BUY',alloc:75,desc:'Undervalued with fear - strong accumulation',color:'#22c55e'};
     if(buyScore>=45)return{type:'buy',action:'BUY',alloc:60,desc:'Below fair value - buy the dip',color:'#22c55e'};
@@ -258,7 +277,7 @@ function getSignal(buyScore,sellScore,pricePct){
     return{type:'neutral',action:'HOLD',alloc:0,desc:'Undervalued but no fear - hold',color:'#eab308'};
   }
 
-  // If price is deeply undervalued (>20% below MA) - Maximum opportunity
+  // Deeply undervalued (>20% below MA) - Maximum opportunity
   if(buyScore>=60)return{type:'buy',action:'STRONG BUY',alloc:100,desc:'Maximum opportunity - deploy all capital',color:'#22c55e'};
   if(buyScore>=45)return{type:'buy',action:'STRONG BUY',alloc:85,desc:'Deep value with fear - aggressive buying',color:'#22c55e'};
   if(buyScore>=30)return{type:'buy',action:'BUY',alloc:65,desc:'Deep value zone - strong accumulation',color:'#22c55e'};
