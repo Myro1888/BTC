@@ -91,6 +91,27 @@ body{background:#0f172a;color:#e2e8f0;font-family:-apple-system,BlinkMacSystemFo
 .trend-action-box .tab-value{font-size:14px;font-weight:bold;margin-bottom:4px}
 .trend-action-box .tab-note{font-size:9px;color:#475569}
 
+/* Reversal Detection Panel */
+.reversal-panel{background:linear-gradient(135deg,rgba(30,41,59,0.95),rgba(15,23,42,0.98));border:2px solid #334155;border-radius:16px;padding:20px;margin-bottom:16px}
+.reversal-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
+.reversal-header .title{font-size:12px;color:#94a3b8;text-transform:uppercase;letter-spacing:2px}
+.reversal-header .status{font-size:14px;font-weight:bold;padding:6px 16px;border-radius:6px}
+.reversal-signals{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:16px}
+.rev-signal{background:#0f172a;border-radius:10px;padding:12px;text-align:center;border:2px solid #334155}
+.rev-signal.active{border-color:#22c55e;box-shadow:0 0 10px rgba(34,197,94,0.2)}
+.rev-signal .rs-icon{font-size:24px;margin-bottom:4px}
+.rev-signal .rs-name{font-size:9px;color:#94a3b8;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px}
+.rev-signal .rs-desc{font-size:8px;color:#64748b}
+.rev-signal .rs-pts{font-size:11px;font-weight:bold;margin-top:4px}
+.reversal-meter{background:#0f172a;border-radius:10px;padding:14px}
+.reversal-meter .rm-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.reversal-meter .rm-title{font-size:10px;color:#94a3b8;text-transform:uppercase}
+.reversal-meter .rm-value{font-size:14px;font-weight:bold}
+.reversal-meter .rm-track{height:10px;background:#1e293b;border-radius:5px;overflow:hidden;position:relative}
+.reversal-meter .rm-fill{height:100%;border-radius:5px;transition:width 0.5s}
+.reversal-meter .rm-threshold{position:absolute;top:0;width:2px;height:100%;background:#fff;opacity:0.5}
+.reversal-meter .rm-note{font-size:9px;color:#64748b;margin-top:8px}
+
 /* Price Action - Compact */
 .price-action{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px}
 .pa-card{background:#1e293b;border:1px solid #334155;border-radius:10px;padding:14px}
@@ -144,6 +165,7 @@ body{background:#0f172a;color:#e2e8f0;font-family:-apple-system,BlinkMacSystemFo
   .indicators-grid{grid-template-columns:repeat(2,1fr)}
   .trend-grid{grid-template-columns:1fr}
   .trend-action{grid-template-columns:1fr}
+  .reversal-signals{grid-template-columns:repeat(2,1fr)}
   .price-action{grid-template-columns:1fr}
   .history-grid{grid-template-columns:1fr}
   .ladder-grid{grid-template-columns:1fr}
@@ -533,6 +555,115 @@ function analyzeTrend(data,price,period,emaShort,emaLong,smaShort,smaLong){
   };
 }
 
+// ═══════ BEAR MARKET REVERSAL DETECTION ═══════
+// Detects bottom reversal signals before recommending buys in downtrends
+// Prevents knife-catching by requiring confirmation before heavy accumulation
+function detectReversals(closes,price){
+  if(!closes||closes.length<50)return{signals:[],score:0,confirmed:false};
+  var signals=[];
+  var score=0;
+
+  // 1. MACD BULLISH CROSSOVER (25 pts)
+  // Histogram turning from negative to positive = momentum shifting
+  var macd=calcMACD(closes);
+  var prevCloses=closes.slice(0,-1);
+  var prevMacd=calcMACD(prevCloses);
+  var macdCross=macd.hist>0&&prevMacd.hist<=0;
+  var macdImproving=macd.hist>prevMacd.hist&&prevMacd.hist<0;
+
+  if(macdCross){
+    signals.push({name:'MACD Crossover',desc:'MACD crossed above signal line',active:true,pts:25});
+    score+=25;
+  }else if(macdImproving){
+    signals.push({name:'MACD Improving',desc:'Bearish momentum weakening',active:true,pts:15});
+    score+=15;
+  }else{
+    signals.push({name:'MACD Crossover',desc:'Waiting for bullish cross',active:false,pts:0});
+  }
+
+  // 2. RSI BULLISH DIVERGENCE (25 pts)
+  // Price making lower lows but RSI making higher lows = hidden strength
+  var rsi=calcRSI(closes,14);
+  var priceLows=[];
+  for(var i=Math.max(2,closes.length-30);i<closes.length-2;i++){
+    if(closes[i]<closes[i-1]&&closes[i]<closes[i-2]&&closes[i]<closes[i+1]&&closes[i]<closes[i+2]){
+      priceLows.push({idx:i,price:closes[i],rsi:rsi[i-1]||50});
+    }
+  }
+  var bullDiv=false;
+  if(priceLows.length>=2){
+    var lastLow=priceLows[priceLows.length-1];
+    var prevLow=priceLows[priceLows.length-2];
+    if(lastLow.price<prevLow.price&&lastLow.rsi>prevLow.rsi)bullDiv=true;
+  }
+  if(bullDiv){
+    signals.push({name:'RSI Divergence',desc:'Price lower low + RSI higher low',active:true,pts:25});
+    score+=25;
+  }else{
+    var currRsi=rsi[rsi.length-1]||50;
+    var prevRsi2=rsi[rsi.length-6]||50;
+    if(currRsi>prevRsi2&&currRsi<50&&currRsi>30){
+      signals.push({name:'RSI Recovery',desc:'RSI recovering from oversold',active:true,pts:10});
+      score+=10;
+    }else{
+      signals.push({name:'RSI Divergence',desc:'No bullish divergence yet',active:false,pts:0});
+    }
+  }
+
+  // 3. PRICE RECLAIMING 21 EMA (20 pts)
+  // Price crossing back above 21 EMA = bears losing control
+  var ema21=calcEMA(closes,21);
+  var currEma21=ema21[ema21.length-1];
+  var prevPrice=closes[closes.length-2];
+  var currPrice=closes[closes.length-1];
+  var emaReclaim=currPrice>currEma21&&prevPrice<=currEma21;
+  var aboveEma=currPrice>currEma21;
+
+  if(emaReclaim){
+    signals.push({name:'EMA Reclaim',desc:'Price reclaimed 21 EMA',active:true,pts:20});
+    score+=20;
+  }else if(aboveEma){
+    signals.push({name:'Above 21 EMA',desc:'Holding above 21 EMA',active:true,pts:15});
+    score+=15;
+  }else{
+    signals.push({name:'EMA Reclaim',desc:'Price still below 21 EMA',active:false,pts:0});
+  }
+
+  // 4. HIGHER LOW FORMATION (20 pts)
+  // Trend structure shifting from lower lows to higher lows = bottom forming
+  var structure=calcTrendStructure(closes,30);
+  if(structure.hl>0&&structure.ll===0){
+    signals.push({name:'Higher Low',desc:'Confirmed higher low pattern',active:true,pts:20});
+    score+=20;
+  }else if(structure.hl>0){
+    signals.push({name:'Higher Low',desc:'Higher low forming (not confirmed)',active:true,pts:10});
+    score+=10;
+  }else{
+    signals.push({name:'Higher Low',desc:'Still making lower lows',active:false,pts:0});
+  }
+
+  // 5. MOMENTUM SHIFT (10 pts)
+  // RSI crossing above 50 = momentum flipping from bearish to bullish
+  var rsiNow=rsi[rsi.length-1]||50;
+  var rsiPrev=rsi[rsi.length-2]||50;
+  if(rsiNow>=50&&rsiPrev<50){
+    signals.push({name:'Momentum Shift',desc:'RSI crossed above 50',active:true,pts:10});
+    score+=10;
+  }else if(rsiNow>=45){
+    signals.push({name:'Momentum Building',desc:'RSI approaching neutral',active:true,pts:5});
+    score+=5;
+  }else{
+    signals.push({name:'Momentum Shift',desc:'RSI still below 50',active:false,pts:0});
+  }
+
+  score=Math.min(100,score);
+  // Require 60+ for confirmed reversal (at least 3 signals active)
+  var confirmed=score>=60;
+  var activeCount=signals.filter(function(s){return s.active}).length;
+
+  return{signals:signals,score:score,confirmed:confirmed,activeCount:activeCount};
+}
+
 // ═══════ OPTIMIZED CALCULATION FUNCTIONS ═══════
 //
 // DESIGN PHILOSOPHY: Buy Fear, Sell Euphoria
@@ -712,28 +843,63 @@ function scoreSell(priceDev,fg,fr,rsi,maLoaded){
   return{score:totalScore,max:100,indicators:indicators};
 }
 
-// ═══════ ACTION SIGNALS ═══════
-function getAction(cycle,buyScore,sellScore){
-  // Primary driver is cycle position, confirmed by scores
+// ═══════ ACTION SIGNALS (TREND-AWARE) ═══════
+// Now requires reversal confirmation before recommending buys in bear trends
+function getAction(cycle,buyScore,sellScore,trendScore,reversal){
+  var isBearTrend=trendScore!==undefined&&trendScore<-20;
+  var hasReversal=reversal&&reversal.score>0;
+  var reversalConfirmed=reversal&&reversal.confirmed;
+
+  // ─── FEAR ZONES: Now trend-filtered ───
   if(cycle<=15){
+    if(isBearTrend&&!reversalConfirmed){
+      return{
+        action:hasReversal?'EARLY ACCUMULATE':'WAIT FOR REVERSAL',
+        allocation:hasReversal?20:0,
+        color:hasReversal?'#86efac':'#eab308',
+        desc:hasReversal?'Early reversal signs in bear market - small position only':'Extreme fear but downtrend intact - wait for bottom signals',
+        confidence:hasReversal?'LOW':'--',
+        reversalNeeded:true
+      };
+    }
     return{
       action:'HEAVY BUY',
       allocation:100,
       color:'#22c55e',
-      desc:'Maximum fear - deploy all available capital',
+      desc:'Maximum fear with trend reversal confirmed - deploy aggressively',
       confidence:buyScore>=70?'HIGH':buyScore>=50?'MEDIUM':'LOW'
     };
   }
   if(cycle<=30){
+    if(isBearTrend&&!reversalConfirmed){
+      return{
+        action:hasReversal?'ACCUMULATE':'WAIT FOR REVERSAL',
+        allocation:hasReversal?25:0,
+        color:hasReversal?'#86efac':'#eab308',
+        desc:hasReversal?'Reversal forming in fear zone - begin small accumulation':'Fear zone but downtrend active - patience pays',
+        confidence:hasReversal?'LOW':'--',
+        reversalNeeded:true
+      };
+    }
     return{
       action:'BUY',
       allocation:75,
       color:'#22c55e',
-      desc:'Fear zone - strong accumulation',
+      desc:'Fear zone with trend support - strong accumulation',
       confidence:buyScore>=50?'HIGH':buyScore>=30?'MEDIUM':'LOW'
     };
   }
   if(cycle<=45){
+    if(isBearTrend&&!reversalConfirmed){
+      return{
+        action:'CAUTIOUS',
+        allocation:hasReversal?10:0,
+        color:'#eab308',
+        desc:'Approaching value but trend still down - watch for reversal signals',
+        confidence:'LOW',
+        reversalNeeded:true
+      };
+    }
     return{
       action:'ACCUMULATE',
       allocation:50,
@@ -742,6 +908,7 @@ function getAction(cycle,buyScore,sellScore){
       confidence:'MEDIUM'
     };
   }
+  // ─── NEUTRAL & GREED ZONES: Unchanged ───
   if(cycle<=55){
     return{
       action:'HOLD',
@@ -824,7 +991,19 @@ function render(){
   // Get scores from optimized 4-indicator system
   var buyRes=scoreBuy(priceDev,fg.val,hr.cap,fr.rate,maLoaded);
   var sellRes=scoreSell(priceDev,fg.val,fr.rate,rsi,maLoaded);
-  var action=getAction(cycle,buyRes.score,sellRes.score);
+
+  // Trend analysis for smart buy/sell filtering
+  var trendCloses=daily.closes||[];
+  var hasTrendDataEarly=trendCloses.length>=50;
+  var shortTrendEarly=hasTrendDataEarly?analyzeTrend(trendCloses,p.price,30,7,21,20,50):{score:0};
+  var medTrendEarly=hasTrendDataEarly?analyzeTrend(trendCloses,p.price,60,21,50,50,100):{score:0};
+  var longTrendEarly=hasTrendDataEarly?analyzeTrend(trendCloses,p.price,90,50,100,50,200):{score:0};
+  var trendScoreEarly=(shortTrendEarly.score*0.25)+(medTrendEarly.score*0.35)+(longTrendEarly.score*0.40);
+
+  // Reversal detection (only meaningful in bear trends)
+  var reversal=hasTrendDataEarly?detectReversals(trendCloses,p.price):{signals:[],score:0,confirmed:false,activeCount:0};
+
+  var action=getAction(cycle,buyRes.score,sellRes.score,trendScoreEarly,reversal);
 
   // Price changes
   var chg7d=daily.price7d>0?((p.price-daily.price7d)/daily.price7d)*100:0;
@@ -849,7 +1028,7 @@ function render(){
 
   // ═══════ HEADER ═══════
   html+='<div class="header"><h1>Bitcoin Fear & Greed Trading Dashboard</h1>';
-  html+='<p class="sub">Buy Fear \u2022 Sell Euphoria \u2022 4 Uncorrelated Indicators</p>';
+  html+='<p class="sub">Buy Confirmed Reversals \u2022 Sell Euphoria \u2022 Trend-Aware Signals</p>';
   html+='<div class="meta"><span>'+fp(p.price)+'</span><span>\u2022</span><span>'+ft(state.lastUp)+'</span><span>\u2022</span><span>Next: '+state.countdown+'s</span></div></div>';
 
   // ═══════ MARKET CYCLE GAUGE ═══════
@@ -860,6 +1039,9 @@ function render(){
   html+='<div class="cycle-value" style="color:'+cycleZone.color+'">'+cycle+'</div>';
   html+='<div class="cycle-label" style="color:'+cycleZone.color+'">'+cycleZone.label+'</div>';
   html+='<div class="cycle-action" style="background:'+cycleZone.bg+';border:2px solid '+action.color+';color:'+action.color+'"><strong>'+action.action+'</strong> \u2022 Deploy '+action.allocation+'% \u2022 Confidence: '+action.confidence+'</div>';
+  if(action.reversalNeeded){
+    html+='<div style="margin-top:8px;font-size:11px;color:#eab308;padding:8px 16px;background:rgba(234,179,8,0.1);border-radius:6px;border:1px solid rgba(234,179,8,0.3)">\u26A0 Bear trend detected - buy signal suppressed until reversal confirmed ('+reversal.score+'/100, need 60+)</div>';
+  }
   html+='</div>';
 
   // ═══════ ACTION PANEL ═══════
@@ -910,19 +1092,14 @@ function render(){
   html+='</div>';
 
   // ═══════ TREND TRADING PANEL ═══════
-  var closes=daily.closes||[];
-  var hasTrendData=closes.length>=50;
-
-  // Analyze each timeframe
-  // Short-term: 7/21 EMA, 20/50 SMA, 30-day structure
-  var shortTrend=hasTrendData?analyzeTrend(closes,p.price,30,7,21,20,50):{signal:'LOADING',direction:'→',color:'#64748b',score:0,strength:50};
-  // Medium-term: 21/50 EMA, 50/100 SMA, 60-day structure
-  var medTrend=hasTrendData?analyzeTrend(closes,p.price,60,21,50,50,100):{signal:'LOADING',direction:'→',color:'#64748b',score:0,strength:50};
-  // Long-term: 50/200 SMA, 90-day structure
-  var longTrend=hasTrendData?analyzeTrend(closes,p.price,90,50,100,50,200):{signal:'LOADING',direction:'→',color:'#64748b',score:0,strength:50};
-
-  // Calculate overall trend bias
-  var trendScore=(shortTrend.score*0.25)+(medTrend.score*0.35)+(longTrend.score*0.40);
+  // Reuse trend data already computed for action signals
+  var closes=trendCloses;
+  var hasTrendData=hasTrendDataEarly;
+  var defaultTrend={signal:'LOADING',direction:'\u2192',color:'#64748b',score:0,strength:50,ema1:0,ema2:0,sma1:0,sma2:0,rsi:50,macd:{trend:'neutral'},structure:{structure:'unknown'},emaSlope:0};
+  var shortTrend=hasTrendData?shortTrendEarly:defaultTrend;
+  var medTrend=hasTrendData?medTrendEarly:defaultTrend;
+  var longTrend=hasTrendData?longTrendEarly:defaultTrend;
+  var trendScore=trendScoreEarly;
   var overallBias,biasColor,biasBg;
   if(trendScore>=50){overallBias='STRONG LONG';biasColor='#22c55e';biasBg='rgba(34,197,94,0.15)';}
   else if(trendScore>=20){overallBias='LONG BIAS';biasColor='#86efac';biasBg='rgba(134,239,172,0.1)';}
@@ -1030,6 +1207,55 @@ function render(){
 
   html+='</div>'; // end trend-master
 
+  // ═══════ REVERSAL DETECTION PANEL ═══════
+  // Only show when trend is bearish (when it matters)
+  var isBearForPanel=trendScoreEarly<-20;
+  var revStatusLabel=!isBearForPanel?'TREND BULLISH - N/A':reversal.confirmed?'REVERSAL CONFIRMED':'WAITING FOR SIGNALS';
+  var revStatusColor=!isBearForPanel?'#22c55e':reversal.confirmed?'#22c55e':reversal.score>0?'#eab308':'#ef4444';
+  var revBorderColor=!isBearForPanel?'#334155':reversal.confirmed?'#22c55e':reversal.score>0?'#eab308':'#ef4444';
+
+  html+='<div class="reversal-panel" style="border-color:'+revBorderColor+'">';
+  html+='<div class="reversal-header"><span class="title">Bear Market Reversal Detection</span>';
+  html+='<span class="status" style="background:rgba('+(reversal.confirmed?'34,197,94':reversal.score>0?'234,179,8':'239,68,68')+',0.15);color:'+revStatusColor+'">'+revStatusLabel+'</span></div>';
+
+  if(!isBearForPanel){
+    html+='<div style="text-align:center;padding:16px;color:#64748b;font-size:12px">Trend is bullish - reversal detection not needed. Buy signals are active.</div>';
+  }else{
+    // Signal cards
+    html+='<div class="reversal-signals">';
+    for(var ri=0;ri<reversal.signals.length;ri++){
+      var rs=reversal.signals[ri];
+      var rsIcon=rs.active?(rs.pts>=20?'\u2705':'\u26A0\uFE0F'):'\u274C';
+      var rsColor=rs.active?'#22c55e':'#64748b';
+      html+='<div class="rev-signal'+(rs.active?' active':'')+'">';
+      html+='<div class="rs-icon">'+rsIcon+'</div>';
+      html+='<div class="rs-name">'+rs.name+'</div>';
+      html+='<div class="rs-desc">'+rs.desc+'</div>';
+      html+='<div class="rs-pts" style="color:'+rsColor+'">'+(rs.active?'+'+rs.pts+' pts':'0 pts')+'</div>';
+      html+='</div>';
+    }
+    html+='</div>';
+
+    // Reversal confidence meter
+    var rmColor=reversal.score>=60?'#22c55e':reversal.score>=30?'#eab308':'#ef4444';
+    html+='<div class="reversal-meter">';
+    html+='<div class="rm-header"><span class="rm-title">Reversal Confidence</span><span class="rm-value" style="color:'+rmColor+'">'+reversal.score+'/100 ('+reversal.activeCount+'/5 signals)</span></div>';
+    html+='<div class="rm-track"><div class="rm-fill" style="width:'+reversal.score+'%;background:'+rmColor+'"></div><div class="rm-threshold" style="left:60%"></div></div>';
+    html+='<div class="rm-note">'+(reversal.confirmed?'<strong style="color:#22c55e">REVERSAL CONFIRMED</strong> - Score above 60 threshold. Buy signals are now active.':reversal.score>0?'<strong style="color:#eab308">EARLY SIGNS</strong> - Some reversal signals present but not enough for confirmation. Accumulate cautiously.':'<strong style="color:#ef4444">NO REVERSAL</strong> - Downtrend intact. Avoid buying - wait for bottom signals to appear.')+'</div>';
+    html+='</div>';
+
+    // What to watch for
+    var inactiveSignals=reversal.signals.filter(function(s){return!s.active});
+    if(inactiveSignals.length>0){
+      html+='<div style="margin-top:12px;padding:12px;background:#0f172a;border-radius:8px;font-size:10px;color:#94a3b8">';
+      html+='<strong>Waiting for:</strong> ';
+      var waitList=inactiveSignals.map(function(s){return s.name}).join(', ');
+      html+=waitList;
+      html+='</div>';
+    }
+  }
+  html+='</div>'; // end reversal-panel
+
   // ═══════ PRICE ACTION PANEL ═══════
   html+='<div class="price-action">';
 
@@ -1128,7 +1354,7 @@ function render(){
   // ═══════ FOOTER ═══════
   html+='<div class="footer">';
   html+='<div class="footer-grid"><div>\u2022 Price: Binance</div><div>\u2022 200W MA: CoinGecko</div><div>\u2022 F&G: Alternative.me</div><div>\u2022 Funding: Binance Futures</div><div>\u2022 Hash Rate: Mempool.space</div><div>\u2022 Daily Data: Binance</div></div>';
-  html+='<div class="warn-box warn-yellow"><strong>OPTIMIZED DESIGN:</strong> 4 uncorrelated indicators replace 7 redundant ones. Price Deviation consolidates MVRV, Price/200WMA, and Realized Price (which were 95% correlated). Hash Ribbons weighted higher (historically most accurate bottom signal).</div>';
+  html+='<div class="warn-box warn-yellow"><strong>BEAR MARKET PROTECTION:</strong> Buy signals are suppressed during confirmed downtrends until reversal signals appear (MACD crossover, RSI divergence, EMA reclaim, higher low formation, momentum shift). This prevents knife-catching and waits for the actual bottom.</div>';
   html+='<div class="warn-box warn-red"><strong>DISCLAIMER:</strong> Educational purposes only. Not financial advice. Past performance does not guarantee future results. Always manage risk appropriately.</div>';
   html+='</div>';
 
