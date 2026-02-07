@@ -152,68 +152,117 @@ function fetchRSI(){
 function calcBuyScore(price,ma,fg,hr,fr){
   var score=0,indicators=[];
 
-  // 1. Price vs 200W MA (35 pts) - most reliable
+  // 1. Price vs 200W MA (40 pts) - MOST CRITICAL for bottom detection
+  // True bottoms only occur AT or BELOW the 200W MA
   var pct=ma>0?((price-ma)/ma)*100:0;
-  var pdPts=pct<=-30?35:pct<=-20?28:pct<=-10?20:pct<=0?12:pct<=20?5:0;
+  var pdPts=pct<=-30?40:pct<=-20?35:pct<=-10?28:pct<=0?20:pct<=15?8:pct<=30?3:0;
   score+=pdPts;
-  indicators.push({name:'Price vs 200W MA',value:(pct>=0?'+':'')+pct.toFixed(0)+'%',pts:pdPts,max:35,buy:pct<=0,status:pct<=-20?'DEEP VALUE':pct<=0?'UNDERVALUED':'ABOVE MA'});
+  indicators.push({name:'Price vs 200W MA',value:(pct>=0?'+':'')+pct.toFixed(0)+'%',pts:pdPts,max:40,buy:pct<=15,status:pct<=-20?'DEEP VALUE':pct<=0?'UNDERVALUED':pct<=30?'FAIR VALUE':'OVERVALUED'});
 
-  // 2. Fear & Greed (25 pts)
-  var fgPts=fg<=10?25:fg<=20?20:fg<=30?15:fg<=40?8:0;
+  // 2. Fear & Greed (20 pts) - but only counts if price is reasonable
+  var fgPts=fg<=10?20:fg<=20?16:fg<=30?12:fg<=40?6:0;
+  // Discount F&G points if price is way above MA (fear at $100k is not same as fear at $20k)
+  if(pct>50)fgPts=Math.round(fgPts*0.25);
+  else if(pct>30)fgPts=Math.round(fgPts*0.5);
   score+=fgPts;
-  indicators.push({name:'Fear & Greed',value:fg,pts:fgPts,max:25,buy:fg<=30,status:fg<=20?'EXTREME FEAR':fg<=40?'FEAR':'NEUTRAL/GREED'});
+  indicators.push({name:'Fear & Greed',value:fg,pts:fgPts,max:20,buy:fg<=30&&pct<=30,status:fg<=20?'EXTREME FEAR':fg<=40?'FEAR':'NEUTRAL/GREED'});
 
-  // 3. Hash Ribbons (25 pts) - miner capitulation
+  // 3. Hash Ribbons (25 pts) - miner capitulation, but discounted if price elevated
   var hrPts=hr?25:0;
+  // Miner stress at $100k is different than at $20k
+  if(pct>50)hrPts=Math.round(hrPts*0.25);
+  else if(pct>30)hrPts=Math.round(hrPts*0.5);
   score+=hrPts;
-  indicators.push({name:'Hash Ribbons',value:hr?'CAPITULATION':'Recovery',pts:hrPts,max:25,buy:hr,status:hr?'MINERS STRESSED':'MINERS OK'});
+  indicators.push({name:'Hash Ribbons',value:hr?'CAPITULATION':'Recovery',pts:hrPts,max:25,buy:hr&&pct<=30,status:hr?'MINERS STRESSED':'MINERS OK'});
 
-  // 4. Funding Rate (15 pts)
+  // 4. Funding Rate (15 pts) - also discounted if price elevated
   var frPct=fr*100;
   var frPts=frPct<=-0.03?15:frPct<=-0.01?10:frPct<0?5:0;
+  if(pct>50)frPts=Math.round(frPts*0.25);
+  else if(pct>30)frPts=Math.round(frPts*0.5);
   score+=frPts;
-  indicators.push({name:'Funding Rate',value:(frPct>=0?'+':'')+frPct.toFixed(3)+'%',pts:frPts,max:15,buy:frPct<0,status:frPct<-0.01?'SHORTS PAYING':frPct<0.02?'NEUTRAL':'LONGS PAYING'});
+  indicators.push({name:'Funding Rate',value:(frPct>=0?'+':'')+frPct.toFixed(3)+'%',pts:frPts,max:15,buy:frPct<0&&pct<=30,status:frPct<-0.01?'SHORTS PAYING':frPct<0.02?'NEUTRAL':'LONGS PAYING'});
 
-  return{score:score,max:100,indicators:indicators};
+  return{score:score,max:100,indicators:indicators,pricePct:pct};
 }
 
 function calcSellScore(price,ma,fg,fr,rsi){
   var score=0,indicators=[];
 
-  // 1. Price vs 200W MA (35 pts)
+  // 1. Price vs 200W MA (40 pts) - MOST CRITICAL for top detection
   var pct=ma>0?((price-ma)/ma)*100:0;
-  var pdPts=pct>=150?35:pct>=100?28:pct>=70?20:pct>=50?12:pct>=30?5:0;
+  var pdPts=pct>=150?40:pct>=100?35:pct>=70?25:pct>=50?15:pct>=30?5:0;
   score+=pdPts;
-  indicators.push({name:'Price vs 200W MA',value:(pct>=0?'+':'')+pct.toFixed(0)+'%',pts:pdPts,max:35,sell:pct>=50,status:pct>=100?'EXTREME HIGH':pct>=50?'ELEVATED':'NORMAL'});
+  indicators.push({name:'Price vs 200W MA',value:(pct>=0?'+':'')+pct.toFixed(0)+'%',pts:pdPts,max:40,sell:pct>=50,status:pct>=100?'EXTREME HIGH':pct>=50?'ELEVATED':'NORMAL'});
 
-  // 2. Fear & Greed (25 pts)
-  var fgPts=fg>=90?25:fg>=80?20:fg>=70?15:fg>=60?8:0;
+  // 2. Fear & Greed (20 pts) - but discounted if price is low
+  var fgPts=fg>=90?20:fg>=80?16:fg>=70?12:fg>=60?6:0;
+  // Greed at low prices is less concerning
+  if(pct<0)fgPts=Math.round(fgPts*0.25);
+  else if(pct<30)fgPts=Math.round(fgPts*0.5);
   score+=fgPts;
-  indicators.push({name:'Fear & Greed',value:fg,pts:fgPts,max:25,sell:fg>=70,status:fg>=80?'EXTREME GREED':fg>=60?'GREED':'NEUTRAL/FEAR'});
+  indicators.push({name:'Fear & Greed',value:fg,pts:fgPts,max:20,sell:fg>=70&&pct>=30,status:fg>=80?'EXTREME GREED':fg>=60?'GREED':'NEUTRAL/FEAR'});
 
-  // 3. RSI (25 pts)
+  // 3. RSI (25 pts) - discounted if price is low
   var rsiPts=rsi>=85?25:rsi>=75?20:rsi>=70?12:rsi>=65?5:0;
+  if(pct<0)rsiPts=Math.round(rsiPts*0.25);
+  else if(pct<30)rsiPts=Math.round(rsiPts*0.5);
   score+=rsiPts;
-  indicators.push({name:'RSI (14)',value:rsi.toFixed(0),pts:rsiPts,max:25,sell:rsi>=70,status:rsi>=80?'OVERBOUGHT':rsi>=65?'HIGH':'NORMAL'});
+  indicators.push({name:'RSI (14)',value:rsi.toFixed(0),pts:rsiPts,max:25,sell:rsi>=70&&pct>=30,status:rsi>=80?'OVERBOUGHT':rsi>=65?'HIGH':'NORMAL'});
 
-  // 4. Funding Rate (15 pts)
+  // 4. Funding Rate (15 pts) - discounted if price is low
   var frPct=fr*100;
   var frPts=frPct>=0.08?15:frPct>=0.05?12:frPct>=0.03?8:frPct>=0.02?4:0;
+  if(pct<0)frPts=Math.round(frPts*0.25);
+  else if(pct<30)frPts=Math.round(frPts*0.5);
   score+=frPts;
-  indicators.push({name:'Funding Rate',value:(frPct>=0?'+':'')+frPct.toFixed(3)+'%',pts:frPts,max:15,sell:frPct>=0.03,status:frPct>=0.05?'OVERLEVERAGED':frPct>=0.02?'ELEVATED':'NORMAL'});
+  indicators.push({name:'Funding Rate',value:(frPct>=0?'+':'')+frPct.toFixed(3)+'%',pts:frPts,max:15,sell:frPct>=0.03&&pct>=30,status:frPct>=0.05?'OVERLEVERAGED':frPct>=0.02?'ELEVATED':'NORMAL'});
 
-  return{score:score,max:100,indicators:indicators};
+  return{score:score,max:100,indicators:indicators,pricePct:pct};
 }
 
-function getSignal(buyScore,sellScore){
-  // Determine primary signal based on scores
-  if(buyScore>=60)return{type:'buy',action:'STRONG BUY',alloc:100,desc:'Maximum opportunity - deploy all available capital',color:'#22c55e'};
-  if(buyScore>=45)return{type:'buy',action:'BUY',alloc:75,desc:'Strong buy zone - aggressive accumulation',color:'#22c55e'};
-  if(buyScore>=30)return{type:'buy',action:'ACCUMULATE',alloc:50,desc:'Favorable conditions - steady buying',color:'#86efac'};
-  if(sellScore>=60)return{type:'sell',action:'STRONG SELL',alloc:100,desc:'Maximum risk - exit most positions',color:'#ef4444'};
-  if(sellScore>=45)return{type:'sell',action:'SELL',alloc:75,desc:'High risk zone - significant profit taking',color:'#ef4444'};
-  if(sellScore>=30)return{type:'sell',action:'REDUCE',alloc:50,desc:'Elevated risk - take some profits',color:'#fb923c'};
-  return{type:'neutral',action:'HOLD',alloc:0,desc:'No strong signal - maintain current positions',color:'#eab308'};
+function getSignal(buyScore,sellScore,pricePct){
+  // Price position is the most important factor
+  // Can't have a "bottom" when price is 50%+ above 200W MA
+  // Can't have a "top" when price is below 200W MA
+
+  // If price is very elevated (>50% above MA), max buy signal is HOLD
+  if(pricePct>50){
+    if(sellScore>=60)return{type:'sell',action:'STRONG SELL',alloc:100,desc:'Extreme valuation - exit most positions',color:'#ef4444'};
+    if(sellScore>=40)return{type:'sell',action:'SELL',alloc:75,desc:'Elevated valuation - significant profit taking',color:'#ef4444'};
+    if(sellScore>=25)return{type:'sell',action:'REDUCE',alloc:50,desc:'Above fair value - consider taking profits',color:'#fb923c'};
+    return{type:'neutral',action:'HOLD',alloc:0,desc:'Elevated but no sell trigger - hold with caution',color:'#eab308'};
+  }
+
+  // If price is moderately elevated (30-50% above MA)
+  if(pricePct>30){
+    if(sellScore>=50)return{type:'sell',action:'SELL',alloc:75,desc:'Getting expensive - take profits',color:'#ef4444'};
+    if(sellScore>=30)return{type:'sell',action:'REDUCE',alloc:50,desc:'Above fair value - reduce exposure',color:'#fb923c'};
+    if(buyScore>=50)return{type:'neutral',action:'HOLD',alloc:0,desc:'Mixed signals - maintain positions',color:'#eab308'};
+    return{type:'neutral',action:'HOLD',alloc:0,desc:'No strong signal - hold positions',color:'#eab308'};
+  }
+
+  // If price is in fair value range (0-30% above MA)
+  if(pricePct>0){
+    if(buyScore>=60)return{type:'buy',action:'BUY',alloc:50,desc:'Good value with fear - accumulate',color:'#22c55e'};
+    if(buyScore>=45)return{type:'buy',action:'ACCUMULATE',alloc:35,desc:'Fair value - steady buying',color:'#86efac'};
+    if(sellScore>=50)return{type:'sell',action:'REDUCE',alloc:35,desc:'Some profit taking warranted',color:'#fb923c'};
+    return{type:'neutral',action:'HOLD',alloc:0,desc:'Fair value zone - hold',color:'#eab308'};
+  }
+
+  // If price is undervalued (below 200W MA) - THIS is where bottoms occur
+  if(pricePct>-20){
+    if(buyScore>=60)return{type:'buy',action:'STRONG BUY',alloc:75,desc:'Undervalued with fear - strong accumulation',color:'#22c55e'};
+    if(buyScore>=45)return{type:'buy',action:'BUY',alloc:60,desc:'Below fair value - buy the dip',color:'#22c55e'};
+    if(buyScore>=30)return{type:'buy',action:'ACCUMULATE',alloc:40,desc:'Good entry zone - steady buying',color:'#86efac'};
+    return{type:'neutral',action:'HOLD',alloc:0,desc:'Undervalued but no fear - hold',color:'#eab308'};
+  }
+
+  // If price is deeply undervalued (>20% below MA) - Maximum opportunity
+  if(buyScore>=60)return{type:'buy',action:'STRONG BUY',alloc:100,desc:'Maximum opportunity - deploy all capital',color:'#22c55e'};
+  if(buyScore>=45)return{type:'buy',action:'STRONG BUY',alloc:85,desc:'Deep value with fear - aggressive buying',color:'#22c55e'};
+  if(buyScore>=30)return{type:'buy',action:'BUY',alloc:65,desc:'Deep value zone - strong accumulation',color:'#22c55e'};
+  return{type:'buy',action:'ACCUMULATE',alloc:40,desc:'Deep value - accumulate on weakness',color:'#86efac'};
 }
 
 function fp(p){return p?'$'+Math.round(p).toLocaleString():'--'}
@@ -225,17 +274,28 @@ function render(){
 
   var buyRes=calcBuyScore(price,ma,fg,hr,fr);
   var sellRes=calcSellScore(price,ma,fg,fr,rsi);
-  var signal=getSignal(buyRes.score,sellRes.score);
+  var pricePct=buyRes.pricePct||0;
+  var signal=getSignal(buyRes.score,sellRes.score,pricePct);
 
-  // Cycle position (0=bottom, 100=top)
-  var cycle=Math.round(Math.max(0,Math.min(100,(sellRes.score*0.6)+(100-buyRes.score)*0.4)));
+  // Cycle position based primarily on price vs 200W MA, adjusted by scores
+  var baseCycle=pricePct<=-30?10:pricePct<=-20?20:pricePct<=-10?30:pricePct<=0?40:pricePct<=30?55:pricePct<=50?70:pricePct<=100?85:95;
+  var cycle=Math.round(Math.max(0,Math.min(100,baseCycle+(sellRes.score-buyRes.score)*0.2)));
 
-  // Historical context
-  var hist=buyRes.score>=50?{period:'Nov 2022, Mar 2020, Dec 2018',result:'+200% to +1500%',acc:'95%'}:
-           buyRes.score>=30?{period:'Jun 2022, Sep 2019, Jan 2019',result:'+50% to +200%',acc:'85%'}:
-           sellRes.score>=50?{period:'Nov 2021, Apr 2021, Dec 2017',result:'Avoided -50% to -85%',acc:'90%'}:
-           sellRes.score>=30?{period:'Feb 2021, Jun 2019',result:'Avoided -20% to -50%',acc:'75%'}:
-           {period:'Mid-cycle consolidation',result:'Variable',acc:'--'};
+  // Historical context - based on price position + scores
+  var hist;
+  if(pricePct<=-20&&buyRes.score>=40){
+    hist={period:'Nov 2022, Mar 2020, Dec 2018',result:'+200% to +1500%',acc:'95%'};
+  }else if(pricePct<=0&&buyRes.score>=30){
+    hist={period:'Jun 2022, Sep 2019, Jan 2019',result:'+50% to +300%',acc:'85%'};
+  }else if(pricePct>=70&&sellRes.score>=30){
+    hist={period:'Nov 2021, Apr 2021, Dec 2017',result:'Avoided -50% to -85%',acc:'90%'};
+  }else if(pricePct>=50){
+    hist={period:'Feb 2021, mid-2019',result:'Caution warranted',acc:'75%'};
+  }else if(pricePct>30){
+    hist={period:'Current: correction from highs',result:'Wait for better entry',acc:'--'};
+  }else{
+    hist={period:'Mid-cycle consolidation',result:'Variable',acc:'--'};
+  }
 
   var html='<div class="container">';
 
