@@ -262,6 +262,9 @@ function fetchDaily(){
     if(!data||data.length<200)throw new Error('insufficient daily data');
     // Extract close prices
     var closes=data.map(function(k){return parseFloat(k[4])});
+    // Extract volume data and calculate OBV from raw klines
+    var volumeData=extractVolumeData(data);
+    var obv=calculateOBV(data);
     // Calculate EMAs
     var ema7=calcEMA(closes,7);
     var ema21=calcEMA(closes,21);
@@ -276,6 +279,8 @@ function fetchDaily(){
     var result={
       price:current,
       closes:closes, // Raw closes for trend analysis
+      volumeData:volumeData, // Daily volume data
+      obv:obv, // On-Balance Volume series
       ema7:ema7[ema7.length-1],
       ema21:ema21[ema21.length-1],
       sma50:sma50[sma50.length-1],
@@ -300,7 +305,7 @@ function fetchDaily(){
   }).catch(function(){
     var f=C.any('daily');
     if(f)return f.value;
-    return{price:0,closes:[],ema7:0,ema21:0,sma50:0,sma200:0,rsi:50,cross:'none',ema7Prev:0,ema21Prev:0,sma50Prev:0,pricePrev:0,price7d:0,price30d:0,price90d:0,src:'N/A',err:true};
+    return{price:0,closes:[],volumeData:[],obv:[],ema7:0,ema21:0,sma50:0,sma200:0,rsi:50,cross:'none',ema7Prev:0,ema21Prev:0,sma50Prev:0,pricePrev:0,price7d:0,price30d:0,price90d:0,src:'N/A',err:true};
   });
 }
 
@@ -366,6 +371,31 @@ function detectCross(data,shortPeriod,longPeriod){
     if(!above&&prevA)return'death';  // 50 crossed below 200
   }
   return currAbove?'bullish':'bearish';
+}
+
+// ═══════ VOLUME ANALYSIS ═══════
+// Extract volume data from Binance kline arrays (index 5 = volume)
+function extractVolumeData(klines){
+  if(!klines||!klines.length)return[];
+  return klines.map(function(k){
+    return{date:new Date(k[0]).toLocaleDateString('en-US',{month:'short',day:'numeric'}),volume:parseFloat(k[5])};
+  });
+}
+
+// Calculate On-Balance Volume from kline data
+// OBV accumulates volume on up-closes and subtracts on down-closes
+function calculateOBV(klines){
+  if(!klines||klines.length<2)return[];
+  var obv=[0];
+  for(var i=1;i<klines.length;i++){
+    var close=parseFloat(klines[i][4]);
+    var prevClose=parseFloat(klines[i-1][4]);
+    var vol=parseFloat(klines[i][5]);
+    if(close>prevClose)obv.push(obv[obv.length-1]+vol);
+    else if(close<prevClose)obv.push(obv[obv.length-1]-vol);
+    else obv.push(obv[obv.length-1]);
+  }
+  return obv;
 }
 
 // ═══════ TREND TRADING CALCULATIONS ═══════
@@ -976,7 +1006,7 @@ function buildGauge(sc,max,color){
 }
 
 // ═══════ RENDER ═══════
-var state={price:{price:0,src:''},ma:{ma:0,ma2y:0,ma90d:0,ma30d:0,ma7d:0,wp:[]},fg:{val:50,txt:'Neutral'},fr:{rate:0},hr:{cap:false},daily:{price:0,closes:[],ema7:0,ema21:0,sma50:0,sma200:0,rsi:50,cross:'none',price7d:0,price30d:0,price90d:0},lastUp:null,countdown:60};
+var state={price:{price:0,src:''},ma:{ma:0,ma2y:0,ma90d:0,ma30d:0,ma7d:0,wp:[]},fg:{val:50,txt:'Neutral'},fr:{rate:0},hr:{cap:false},daily:{price:0,closes:[],volumeData:[],obv:[],ema7:0,ema21:0,sma50:0,sma200:0,rsi:50,cross:'none',price7d:0,price30d:0,price90d:0},lastUp:null,countdown:60};
 
 function render(){
   var p=state.price,ma=state.ma,fg=state.fg,fr=state.fr,hr=state.hr,daily=state.daily;
