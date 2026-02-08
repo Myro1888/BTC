@@ -256,7 +256,7 @@ function fetchHR(){
 
 // ═══════ DAILY PRICE DATA FOR TECHNICAL ANALYSIS ═══════
 function fetchDaily(){
-  var c=C.get('daily',3600000);if(c&&!c.stale)return Promise.resolve(c.value);
+  var c=C.get('daily',3600000);if(c&&!c.stale&&c.value.volumeData)return Promise.resolve(c.value);
   // Fetch 365 days of daily data from Binance
   return fj('https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1d&limit=365',15000).then(function(data){
     if(!data||data.length<200)throw new Error('insufficient daily data');
@@ -304,7 +304,7 @@ function fetchDaily(){
     return result;
   }).catch(function(){
     var f=C.any('daily');
-    if(f)return f.value;
+    if(f){if(!f.value.volumeData)f.value.volumeData=[];if(!f.value.obv)f.value.obv=[];return f.value;}
     return{price:0,closes:[],volumeData:[],obv:[],ema7:0,ema21:0,sma50:0,sma200:0,rsi:50,cross:'none',ema7Prev:0,ema21Prev:0,sma50Prev:0,pricePrev:0,price7d:0,price30d:0,price90d:0,src:'N/A',err:true};
   });
 }
@@ -811,10 +811,10 @@ function scoreBuy(priceDev,fg,hrCap,fr,maLoaded,volumeData,obv){
 
   // 5. VOLUME CONFIRMATION (10 pts) - Bonus when OBV trending up AND volume above 20-MA
   var volPts=0;
-  if(volumeData&&volumeData.length>=20&&obv&&obv.length>=15){
+  if(volumeData&&volumeData.length>=21&&obv&&obv.length>=15){
     var obvNow=obv[obv.length-1],obv14=obv[obv.length-15];
     var obvUp=obvNow>obv14;
-    var volSum=0;for(var vi=volumeData.length-20;vi<volumeData.length;vi++)volSum+=volumeData[vi].volume;
+    var volSum=0;for(var vi=volumeData.length-21;vi<volumeData.length-1;vi++)volSum+=volumeData[vi].volume;
     var volMA20=volSum/20;
     var volAbove=volumeData[volumeData.length-1].volume>volMA20;
     if(obvUp&&volAbove)volPts=10;
