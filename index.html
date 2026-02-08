@@ -51,7 +51,7 @@ body{background:#0f172a;color:#e2e8f0;font-family:-apple-system,BlinkMacSystemFo
 .indicator-dot .name{font-size:8px;color:#64748b;text-align:center;max-width:60px}
 
 /* Indicator Cards - Simplified */
-.indicators-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}
+.indicators-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:16px}
 .ind-card{background:#1e293b;border:1px solid #334155;border-radius:10px;padding:14px}
 .ind-card .ind-name{font-size:9px;color:#94a3b8;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center}
 .ind-card .ind-weight{font-size:8px;color:#475569;background:#0f172a;padding:2px 6px;border-radius:4px}
@@ -746,9 +746,9 @@ function calcMarketCycle(priceDev,fg,hrCap,fr,rsi){
   return Math.round(pdScore*0.35+fgScore*0.25+hrScore*0.20+frScore*0.10+rsiScore*0.10);
 }
 
-// ═══════ BUY SCORE (100 max) - 4 UNCORRELATED INDICATORS ═══════
+// ═══════ BUY SCORE (110 max) - 4 UNCORRELATED INDICATORS + VOLUME CONFIRMATION ═══════
 // Each indicator measures something DIFFERENT
-function scoreBuy(priceDev,fg,hrCap,fr,maLoaded){
+function scoreBuy(priceDev,fg,hrCap,fr,maLoaded,volumeData,obv){
   var indicators=[];
   var totalScore=0;
 
@@ -809,7 +809,28 @@ function scoreBuy(priceDev,fg,hrCap,fr,maLoaded){
     buyZone:'<0%',sellZone:'>0.05%'
   });
 
-  return{score:totalScore,max:100,indicators:indicators};
+  // 5. VOLUME CONFIRMATION (10 pts) - Bonus when OBV trending up AND volume above 20-MA
+  var volPts=0;
+  if(volumeData&&volumeData.length>=20&&obv&&obv.length>=15){
+    var obvNow=obv[obv.length-1],obv14=obv[obv.length-15];
+    var obvUp=obvNow>obv14;
+    var volSum=0;for(var vi=volumeData.length-20;vi<volumeData.length;vi++)volSum+=volumeData[vi].volume;
+    var volMA20=volSum/20;
+    var volAbove=volumeData[volumeData.length-1].volume>volMA20;
+    if(obvUp&&volAbove)volPts=10;
+  }
+  totalScore+=volPts;
+  indicators.push({
+    name:'Volume',
+    value:volPts>0?'CONFIRMED':'Unconfirmed',
+    pts:volPts,max:10,
+    status:volPts>0?'OBV UP + HIGH VOL':'Waiting',
+    color:volPts>0?'#22c55e':'#64748b',
+    desc:'OBV 14d slope + vol vs 20MA',
+    buyZone:'OBV\u2191 + Vol>MA',sellZone:'--'
+  });
+
+  return{score:totalScore,max:110,indicators:indicators};
 }
 
 // ═══════ SELL SCORE (100 max) - 4 UNCORRELATED INDICATORS ═══════
@@ -1103,8 +1124,8 @@ function render(){
   var rsi=daily.rsi||50;
   var cycle=calcMarketCycle(priceDev,fg.val,hr.cap,fr.rate,rsi);
 
-  // Get scores from optimized 4-indicator system
-  var buyRes=scoreBuy(priceDev,fg.val,hr.cap,fr.rate,maLoaded);
+  // Get scores from optimized 5-indicator system (4 core + volume confirmation)
+  var buyRes=scoreBuy(priceDev,fg.val,hr.cap,fr.rate,maLoaded,daily.volumeData,daily.obv);
   var sellRes=scoreSell(priceDev,fg.val,fr.rate,rsi,maLoaded);
 
   // Trend analysis for smart buy/sell filtering
@@ -1173,15 +1194,26 @@ function render(){
   // ═══════ CONFIDENCE / INDICATOR AGREEMENT ═══════
   var buyActive=buyRes.indicators.filter(function(i){return i.pts>0}).length;
   var sellActive=sellRes.indicators.filter(function(i){return i.pts>0}).length;
-  var agreePct=cycle<=50?Math.round((buyActive/4)*100):Math.round((sellActive/4)*100);
+  var agreePct=cycle<=50?Math.round((buyActive/5)*100):Math.round((sellActive/4)*100);
   var agreeColor=agreePct>=75?'#22c55e':agreePct>=50?'#eab308':'#64748b';
 
+  // Buy score classification (scaled to 110 max)
+  var buyLabel,buyLabelColor;
+  if(buyRes.score>=88){buyLabel='EXTREME BUY';buyLabelColor='#22c55e';}
+  else if(buyRes.score>=66){buyLabel='STRONG BUY';buyLabelColor='#86efac';}
+  else if(buyRes.score>=44){buyLabel='BUY';buyLabelColor='#a3e635';}
+  else if(buyRes.score>=22){buyLabel='ACCUMULATE';buyLabelColor='#eab308';}
+  else{buyLabel='HOLD';buyLabelColor='#64748b';}
+
+  var buyPct=Math.round(buyRes.score/buyRes.max*100);
+  var sellPct=Math.round(sellRes.score/sellRes.max*100);
+
   html+='<div class="confidence-section">';
-  html+='<div class="confidence-header"><span class="confidence-title">Indicator Agreement</span><span class="confidence-value" style="color:'+agreeColor+'">'+(cycle<=50?buyActive:sellActive)+'/4 indicators confirm ('+(cycle<=50?'buy':'sell')+')</span></div>';
+  html+='<div class="confidence-header"><span class="confidence-title">Indicator Agreement</span><span class="confidence-value" style="color:'+agreeColor+'">'+(cycle<=50?buyActive:sellActive)+'/'+(cycle<=50?'5':'4')+' indicators confirm ('+(cycle<=50?'buy':'sell')+')</span></div>';
   html+='<div class="confidence-bar">';
-  html+='<div class="confidence-segment" style="width:'+(buyRes.score)+'%;background:#22c55e"></div>';
-  html+='<div class="confidence-segment" style="width:'+(100-buyRes.score-sellRes.score)+'%;background:#334155"></div>';
-  html+='<div class="confidence-segment" style="width:'+(sellRes.score)+'%;background:#ef4444"></div>';
+  html+='<div class="confidence-segment" style="width:'+buyPct+'%;background:#22c55e"></div>';
+  html+='<div class="confidence-segment" style="width:'+(100-buyPct-sellPct)+'%;background:#334155"></div>';
+  html+='<div class="confidence-segment" style="width:'+sellPct+'%;background:#ef4444"></div>';
   html+='</div>';
   html+='<div class="indicator-dots">';
   for(var i=0;i<buyRes.indicators.length;i++){
@@ -1189,9 +1221,17 @@ function render(){
     var dotClass=ind.pts>0?'active-buy':'neutral';
     html+='<div class="indicator-dot"><div class="dot '+dotClass+'"></div><div class="name">'+ind.name+'</div></div>';
   }
-  html+='</div></div>';
+  html+='</div>';
+  // Buy score classification bar
+  if(cycle<=50){
+    html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding:8px 12px;background:#0f172a;border-radius:6px">';
+    html+='<span style="font-size:10px;color:#64748b">Buy Score: <strong style="color:#cbd5e1">'+buyRes.score+'/'+buyRes.max+'</strong></span>';
+    html+='<span style="font-size:11px;font-weight:bold;color:'+buyLabelColor+'">'+buyLabel+'</span>';
+    html+='</div>';
+  }
+  html+='</div>';
 
-  // ═══════ BUY INDICATORS (4 cards) ═══════
+  // ═══════ BUY INDICATORS (5 cards) ═══════
   html+='<div class="indicators-grid">';
   for(var i=0;i<buyRes.indicators.length;i++){
     var ind=buyRes.indicators[i];
