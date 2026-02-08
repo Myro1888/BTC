@@ -51,7 +51,7 @@ body{background:#0f172a;color:#e2e8f0;font-family:-apple-system,BlinkMacSystemFo
 .indicator-dot .name{font-size:8px;color:#64748b;text-align:center;max-width:60px}
 
 /* Indicator Cards - Simplified */
-.indicators-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}
+.indicators-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:16px}
 .ind-card{background:#1e293b;border:1px solid #334155;border-radius:10px;padding:14px}
 .ind-card .ind-name{font-size:9px;color:#94a3b8;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center}
 .ind-card .ind-weight{font-size:8px;color:#475569;background:#0f172a;padding:2px 6px;border-radius:4px}
@@ -262,6 +262,9 @@ function fetchDaily(){
     if(!data||data.length<200)throw new Error('insufficient daily data');
     // Extract close prices
     var closes=data.map(function(k){return parseFloat(k[4])});
+    // Extract volume data and calculate OBV from raw klines
+    var volumeData=extractVolumeData(data);
+    var obv=calculateOBV(data);
     // Calculate EMAs
     var ema7=calcEMA(closes,7);
     var ema21=calcEMA(closes,21);
@@ -276,6 +279,8 @@ function fetchDaily(){
     var result={
       price:current,
       closes:closes, // Raw closes for trend analysis
+      volumeData:volumeData, // Daily volume data
+      obv:obv, // On-Balance Volume series
       ema7:ema7[ema7.length-1],
       ema21:ema21[ema21.length-1],
       sma50:sma50[sma50.length-1],
@@ -300,7 +305,7 @@ function fetchDaily(){
   }).catch(function(){
     var f=C.any('daily');
     if(f)return f.value;
-    return{price:0,closes:[],ema7:0,ema21:0,sma50:0,sma200:0,rsi:50,cross:'none',ema7Prev:0,ema21Prev:0,sma50Prev:0,pricePrev:0,price7d:0,price30d:0,price90d:0,src:'N/A',err:true};
+    return{price:0,closes:[],volumeData:[],obv:[],ema7:0,ema21:0,sma50:0,sma200:0,rsi:50,cross:'none',ema7Prev:0,ema21Prev:0,sma50Prev:0,pricePrev:0,price7d:0,price30d:0,price90d:0,src:'N/A',err:true};
   });
 }
 
@@ -366,6 +371,31 @@ function detectCross(data,shortPeriod,longPeriod){
     if(!above&&prevA)return'death';  // 50 crossed below 200
   }
   return currAbove?'bullish':'bearish';
+}
+
+// ═══════ VOLUME ANALYSIS ═══════
+// Extract volume data from Binance kline arrays (index 5 = volume)
+function extractVolumeData(klines){
+  if(!klines||!klines.length)return[];
+  return klines.map(function(k){
+    return{date:new Date(k[0]).toLocaleDateString('en-US',{month:'short',day:'numeric'}),volume:parseFloat(k[5])};
+  });
+}
+
+// Calculate On-Balance Volume from kline data
+// OBV accumulates volume on up-closes and subtracts on down-closes
+function calculateOBV(klines){
+  if(!klines||klines.length<2)return[];
+  var obv=[0];
+  for(var i=1;i<klines.length;i++){
+    var close=parseFloat(klines[i][4]);
+    var prevClose=parseFloat(klines[i-1][4]);
+    var vol=parseFloat(klines[i][5]);
+    if(close>prevClose)obv.push(obv[obv.length-1]+vol);
+    else if(close<prevClose)obv.push(obv[obv.length-1]-vol);
+    else obv.push(obv[obv.length-1]);
+  }
+  return obv;
 }
 
 // ═══════ TREND TRADING CALCULATIONS ═══════
@@ -716,9 +746,9 @@ function calcMarketCycle(priceDev,fg,hrCap,fr,rsi){
   return Math.round(pdScore*0.35+fgScore*0.25+hrScore*0.20+frScore*0.10+rsiScore*0.10);
 }
 
-// ═══════ BUY SCORE (100 max) - 4 UNCORRELATED INDICATORS ═══════
+// ═══════ BUY SCORE (110 max) - 4 UNCORRELATED INDICATORS + VOLUME CONFIRMATION ═══════
 // Each indicator measures something DIFFERENT
-function scoreBuy(priceDev,fg,hrCap,fr,maLoaded){
+function scoreBuy(priceDev,fg,hrCap,fr,maLoaded,volumeData,obv){
   var indicators=[];
   var totalScore=0;
 
@@ -779,7 +809,28 @@ function scoreBuy(priceDev,fg,hrCap,fr,maLoaded){
     buyZone:'<0%',sellZone:'>0.05%'
   });
 
-  return{score:totalScore,max:100,indicators:indicators};
+  // 5. VOLUME CONFIRMATION (10 pts) - Bonus when OBV trending up AND volume above 20-MA
+  var volPts=0;
+  if(volumeData&&volumeData.length>=20&&obv&&obv.length>=15){
+    var obvNow=obv[obv.length-1],obv14=obv[obv.length-15];
+    var obvUp=obvNow>obv14;
+    var volSum=0;for(var vi=volumeData.length-20;vi<volumeData.length;vi++)volSum+=volumeData[vi].volume;
+    var volMA20=volSum/20;
+    var volAbove=volumeData[volumeData.length-1].volume>volMA20;
+    if(obvUp&&volAbove)volPts=10;
+  }
+  totalScore+=volPts;
+  indicators.push({
+    name:'Volume',
+    value:volPts>0?'CONFIRMED':'Unconfirmed',
+    pts:volPts,max:10,
+    status:volPts>0?'OBV UP + HIGH VOL':'Waiting',
+    color:volPts>0?'#22c55e':'#64748b',
+    desc:'OBV 14d slope + vol vs 20MA',
+    buyZone:'OBV\u2191 + Vol>MA',sellZone:'--'
+  });
+
+  return{score:totalScore,max:110,indicators:indicators};
 }
 
 // ═══════ SELL SCORE (100 max) - 4 UNCORRELATED INDICATORS ═══════
@@ -949,9 +1000,10 @@ function fp(p){return(!p||p===0)?'$--':'$'+p.toLocaleString('en-US',{minimumFrac
 function ft(t){return!t?'--':new Date(t).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit'})}
 
 // ═══════ SVG CHART ═══════
-function buildChart(data){
+function buildChart(data,dailyVol,dailyCloses){
   if(!data||data.length<2)return'<div style="text-align:center;color:#64748b;padding:20px">Chart data loading...</div>';
-  var W=600,H=250,pl=55,pr=15,pt=15,pb=35;var cW=W-pl-pr,cH=H-pt-pb;
+  var hasVol=dailyVol&&dailyVol.length>0&&dailyCloses&&dailyCloses.length>0;
+  var W=600,H=250,pl=55,pr=hasVol?55:15,pt=15,pb=35;var cW=W-pl-pr,cH=H-pt-pb;
   var prices=data.map(function(d){return d.p}),mas=data.map(function(d){return d.m});
   var all=prices.concat(mas),mn=Math.min.apply(null,all)*0.95,mx=Math.max.apply(null,all)*1.05,rng=mx-mn||1;
   function x(i){return pl+(i/(data.length-1))*cW}
@@ -963,10 +1015,94 @@ function buildChart(data){
   svg+='<defs><linearGradient id="af" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#3b82f6" stop-opacity="0.3"/><stop offset="100%" stop-color="#3b82f6" stop-opacity="0.02"/></linearGradient></defs>';
   for(var i=0;i<=4;i++){var yy=pt+(cH*i/4);svg+='<line x1="'+pl+'" y1="'+yy+'" x2="'+(W-pr)+'" y2="'+yy+'" stroke="#1e293b" stroke-width="1"/>';var val=mn+(rng*(4-i)/4);svg+='<text x="'+(pl-4)+'" y="'+(yy+3)+'" text-anchor="end" fill="#4a5568" font-size="9" font-family="monospace">$'+(val/1000).toFixed(0)+'k</text>'}
   var step=Math.max(1,Math.floor(data.length/6));for(var i=0;i<data.length;i+=step){svg+='<text x="'+x(i)+'" y="'+(H-5)+'" text-anchor="middle" fill="#4a5568" font-size="8" font-family="monospace">'+data[i].d+'</text>'}
+  // Volume bars (aggregated daily→weekly, rendered behind price)
+  if(hasVol){
+    var wkVol=[],dpw=Math.max(1,Math.floor(dailyCloses.length/data.length));
+    for(var w=0;w<data.length;w++){
+      var si=w*dpw,ei=Math.min(si+dpw,dailyCloses.length),wv=0;
+      for(var d=si;d<ei;d++)wv+=dailyVol[d].volume;
+      var ci=Math.min(ei-1,dailyCloses.length-1),pi=Math.max(0,si-1);
+      wkVol.push({v:wv,up:dailyCloses[ci]>=dailyCloses[pi]});
+    }
+    var mxV=0;for(var i=0;i<wkVol.length;i++)if(wkVol[i].v>mxV)mxV=wkVol[i].v;
+    if(mxV>0){
+      var bW=Math.max(2,(cW/data.length)*0.7);
+      for(var i=0;i<wkVol.length;i++){
+        var bH=(wkVol[i].v/mxV)*(cH*0.35);
+        var bx=x(i)-bW/2;var by=pt+cH-bH;
+        svg+='<rect x="'+bx.toFixed(1)+'" y="'+by.toFixed(1)+'" width="'+bW.toFixed(1)+'" height="'+bH.toFixed(1)+'" fill="'+(wkVol[i].up?'rgba(34,197,94,0.3)':'rgba(239,68,68,0.3)')+'"/>';
+      }
+      // Right Y-axis labels for volume
+      svg+='<text x="'+(W-pr+4)+'" y="'+(pt+3)+'" text-anchor="start" fill="#475569" font-size="7" font-family="monospace">Vol</text>';
+      for(var i=0;i<=3;i++){
+        var vy=pt+cH-(cH*0.35*i/3);var vv=mxV*i/3;
+        var vl=vv>=1e9?(vv/1e9).toFixed(1)+'B':vv>=1e6?(vv/1e6).toFixed(0)+'M':(vv/1e3).toFixed(0)+'K';
+        svg+='<text x="'+(W-pr+4)+'" y="'+(vy+3)+'" text-anchor="start" fill="#4a5568" font-size="8" font-family="monospace">'+vl+'</text>';
+      }
+    }
+  }
   svg+='<path d="'+ap+'" fill="url(#af)"/>';
   svg+='<path d="'+pp+'" fill="none" stroke="#3b82f6" stroke-width="2"/>';
   svg+='<path d="'+mp+'" fill="none" stroke="#f59e0b" stroke-width="2" stroke-dasharray="6 3"/>';
   svg+='</svg>';return svg;
+}
+
+// ═══════ OBV CHART ═══════
+function buildOBVChart(obv){
+  if(!obv||obv.length<2)return'';
+  // Sample OBV at weekly intervals for consistency with main chart
+  var weekly=[];for(var i=6;i<obv.length;i+=7)weekly.push(obv[i]);
+  if(weekly.length<2){for(var i=0;i<obv.length;i+=Math.max(1,Math.floor(obv.length/52)))weekly.push(obv[i])}
+  if(weekly[weekly.length-1]!==obv[obv.length-1])weekly.push(obv[obv.length-1]);
+  if(weekly.length<2)return'';
+
+  var W=600,H=100,pl=55,pr=55,pt=10,pb=20;var cW=W-pl-pr,cH=H-pt-pb;
+  var mn=weekly[0],mx=weekly[0];
+  for(var i=1;i<weekly.length;i++){if(weekly[i]<mn)mn=weekly[i];if(weekly[i]>mx)mx=weekly[i]}
+  var rng=mx-mn||1;mn-=rng*0.05;mx+=rng*0.05;rng=mx-mn;
+
+  function ox(i){return pl+(i/(weekly.length-1))*cW}
+  function oy(v){return pt+cH-((v-mn)/rng)*cH}
+
+  var obvUp=weekly[weekly.length-1]>weekly[0];
+  var lineColor=obvUp?'#22c55e':'#ef4444';
+  var gc=obvUp?'34,197,94':'239,68,68';
+
+  var path='M'+weekly.map(function(v,i){return ox(i)+','+oy(v)}).join('L');
+  var area=path+'L'+ox(weekly.length-1)+','+(pt+cH)+'L'+ox(0)+','+(pt+cH)+'Z';
+
+  var svg='<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:auto">';
+  svg+='<defs><linearGradient id="obvg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="rgb('+gc+')" stop-opacity="0.2"/><stop offset="100%" stop-color="rgb('+gc+')" stop-opacity="0.02"/></linearGradient></defs>';
+
+  // Horizontal grid
+  svg+='<line x1="'+pl+'" y1="'+pt+'" x2="'+(W-pr)+'" y2="'+pt+'" stroke="#1e293b" stroke-width="1"/>';
+  svg+='<line x1="'+pl+'" y1="'+(pt+cH/2)+'" x2="'+(W-pr)+'" y2="'+(pt+cH/2)+'" stroke="#1e293b" stroke-width="1"/>';
+  svg+='<line x1="'+pl+'" y1="'+(pt+cH)+'" x2="'+(W-pr)+'" y2="'+(pt+cH)+'" stroke="#1e293b" stroke-width="1"/>';
+
+  // Y-axis labels (left side)
+  for(var i=0;i<=2;i++){
+    var yy=pt+(cH*i/2);var val=mx-(rng*i/2);
+    var lbl=Math.abs(val)>=1e6?(val/1e6).toFixed(1)+'M':Math.abs(val)>=1e3?(val/1e3).toFixed(0)+'K':val.toFixed(0);
+    svg+='<text x="'+(pl-4)+'" y="'+(yy+3)+'" text-anchor="end" fill="#4a5568" font-size="8" font-family="monospace">'+lbl+'</text>';
+  }
+
+  // Zero line if OBV crosses zero
+  if(mn<0&&mx>0){
+    var zy=oy(0);
+    svg+='<line x1="'+pl+'" y1="'+zy+'" x2="'+(W-pr)+'" y2="'+zy+'" stroke="#475569" stroke-width="1" stroke-dasharray="4 2"/>';
+    svg+='<text x="'+(W-pr+4)+'" y="'+(zy+3)+'" text-anchor="start" fill="#475569" font-size="7" font-family="monospace">0</text>';
+  }
+
+  // Area fill + line
+  svg+='<path d="'+area+'" fill="url(#obvg)"/>';
+  svg+='<path d="'+path+'" fill="none" stroke="'+lineColor+'" stroke-width="1.5"/>';
+
+  // Trend label
+  var lastY=oy(weekly[weekly.length-1]);
+  svg+='<text x="'+(W-pr+4)+'" y="'+(lastY+3)+'" text-anchor="start" fill="'+lineColor+'" font-size="8" font-weight="bold" font-family="monospace">'+(obvUp?'\u25B2':'\u25BC')+'</text>';
+
+  svg+='</svg>';
+  return svg;
 }
 
 // ═══════ GAUGES ═══════
@@ -976,7 +1112,7 @@ function buildGauge(sc,max,color){
 }
 
 // ═══════ RENDER ═══════
-var state={price:{price:0,src:''},ma:{ma:0,ma2y:0,ma90d:0,ma30d:0,ma7d:0,wp:[]},fg:{val:50,txt:'Neutral'},fr:{rate:0},hr:{cap:false},daily:{price:0,closes:[],ema7:0,ema21:0,sma50:0,sma200:0,rsi:50,cross:'none',price7d:0,price30d:0,price90d:0},lastUp:null,countdown:60};
+var state={price:{price:0,src:''},ma:{ma:0,ma2y:0,ma90d:0,ma30d:0,ma7d:0,wp:[]},fg:{val:50,txt:'Neutral'},fr:{rate:0},hr:{cap:false},daily:{price:0,closes:[],volumeData:[],obv:[],ema7:0,ema21:0,sma50:0,sma200:0,rsi:50,cross:'none',price7d:0,price30d:0,price90d:0},lastUp:null,countdown:60};
 
 function render(){
   var p=state.price,ma=state.ma,fg=state.fg,fr=state.fr,hr=state.hr,daily=state.daily;
@@ -988,8 +1124,8 @@ function render(){
   var rsi=daily.rsi||50;
   var cycle=calcMarketCycle(priceDev,fg.val,hr.cap,fr.rate,rsi);
 
-  // Get scores from optimized 4-indicator system
-  var buyRes=scoreBuy(priceDev,fg.val,hr.cap,fr.rate,maLoaded);
+  // Get scores from optimized 5-indicator system (4 core + volume confirmation)
+  var buyRes=scoreBuy(priceDev,fg.val,hr.cap,fr.rate,maLoaded,daily.volumeData,daily.obv);
   var sellRes=scoreSell(priceDev,fg.val,fr.rate,rsi,maLoaded);
 
   // Trend analysis for smart buy/sell filtering
@@ -1058,15 +1194,26 @@ function render(){
   // ═══════ CONFIDENCE / INDICATOR AGREEMENT ═══════
   var buyActive=buyRes.indicators.filter(function(i){return i.pts>0}).length;
   var sellActive=sellRes.indicators.filter(function(i){return i.pts>0}).length;
-  var agreePct=cycle<=50?Math.round((buyActive/4)*100):Math.round((sellActive/4)*100);
+  var agreePct=cycle<=50?Math.round((buyActive/5)*100):Math.round((sellActive/4)*100);
   var agreeColor=agreePct>=75?'#22c55e':agreePct>=50?'#eab308':'#64748b';
 
+  // Buy score classification (scaled to 110 max)
+  var buyLabel,buyLabelColor;
+  if(buyRes.score>=88){buyLabel='EXTREME BUY';buyLabelColor='#22c55e';}
+  else if(buyRes.score>=66){buyLabel='STRONG BUY';buyLabelColor='#86efac';}
+  else if(buyRes.score>=44){buyLabel='BUY';buyLabelColor='#a3e635';}
+  else if(buyRes.score>=22){buyLabel='ACCUMULATE';buyLabelColor='#eab308';}
+  else{buyLabel='HOLD';buyLabelColor='#64748b';}
+
+  var buyPct=Math.round(buyRes.score/buyRes.max*100);
+  var sellPct=Math.round(sellRes.score/sellRes.max*100);
+
   html+='<div class="confidence-section">';
-  html+='<div class="confidence-header"><span class="confidence-title">Indicator Agreement</span><span class="confidence-value" style="color:'+agreeColor+'">'+(cycle<=50?buyActive:sellActive)+'/4 indicators confirm ('+(cycle<=50?'buy':'sell')+')</span></div>';
+  html+='<div class="confidence-header"><span class="confidence-title">Indicator Agreement</span><span class="confidence-value" style="color:'+agreeColor+'">'+(cycle<=50?buyActive:sellActive)+'/'+(cycle<=50?'5':'4')+' indicators confirm ('+(cycle<=50?'buy':'sell')+')</span></div>';
   html+='<div class="confidence-bar">';
-  html+='<div class="confidence-segment" style="width:'+(buyRes.score)+'%;background:#22c55e"></div>';
-  html+='<div class="confidence-segment" style="width:'+(100-buyRes.score-sellRes.score)+'%;background:#334155"></div>';
-  html+='<div class="confidence-segment" style="width:'+(sellRes.score)+'%;background:#ef4444"></div>';
+  html+='<div class="confidence-segment" style="width:'+buyPct+'%;background:#22c55e"></div>';
+  html+='<div class="confidence-segment" style="width:'+(100-buyPct-sellPct)+'%;background:#334155"></div>';
+  html+='<div class="confidence-segment" style="width:'+sellPct+'%;background:#ef4444"></div>';
   html+='</div>';
   html+='<div class="indicator-dots">';
   for(var i=0;i<buyRes.indicators.length;i++){
@@ -1074,9 +1221,17 @@ function render(){
     var dotClass=ind.pts>0?'active-buy':'neutral';
     html+='<div class="indicator-dot"><div class="dot '+dotClass+'"></div><div class="name">'+ind.name+'</div></div>';
   }
-  html+='</div></div>';
+  html+='</div>';
+  // Buy score classification bar
+  if(cycle<=50){
+    html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding:8px 12px;background:#0f172a;border-radius:6px">';
+    html+='<span style="font-size:10px;color:#64748b">Buy Score: <strong style="color:#cbd5e1">'+buyRes.score+'/'+buyRes.max+'</strong></span>';
+    html+='<span style="font-size:11px;font-weight:bold;color:'+buyLabelColor+'">'+buyLabel+'</span>';
+    html+='</div>';
+  }
+  html+='</div>';
 
-  // ═══════ BUY INDICATORS (4 cards) ═══════
+  // ═══════ BUY INDICATORS (5 cards) ═══════
   html+='<div class="indicators-grid">';
   for(var i=0;i<buyRes.indicators.length;i++){
     var ind=buyRes.indicators[i];
@@ -1347,8 +1502,11 @@ function render(){
   // ═══════ CHART ═══════
   html+='<div class="chart-card">';
   html+='<div class="chart-title">52-Week Price vs 200-Week MA</div>';
-  html+=buildChart(ma.wp);
-  html+='<div class="chart-legend"><span><span class="dot" style="background:#3b82f6"></span>BTC Price</span><span><span class="dot" style="background:#f59e0b"></span>200W MA</span></div>';
+  html+=buildChart(ma.wp,daily.volumeData,daily.closes);
+  html+='<div class="chart-legend"><span><span class="dot" style="background:#3b82f6"></span>BTC Price</span><span><span class="dot" style="background:#f59e0b"></span>200W MA</span><span><span class="dot" style="background:rgba(34,197,94,0.5)"></span>Volume (green=up)</span><span><span class="dot" style="background:rgba(239,68,68,0.5)"></span>Volume (red=down)</span></div>';
+  html+='<div style="margin-top:8px"><div style="font-size:10px;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">On-Balance Volume (OBV)</div>';
+  html+=buildOBVChart(daily.obv);
+  html+='</div>';
   html+='</div>';
 
   // ═══════ FOOTER ═══════
