@@ -810,22 +810,24 @@ function scoreBuy(priceDev,fg,hrCap,fr,maLoaded,volumeData,obv){
   });
 
   // 5. VOLUME CONFIRMATION (10 pts) - Bonus when OBV trending up AND volume above 20-MA
+  // Uses last COMPLETED day (length-2) to avoid partial candle bias
   var volPts=0;
-  if(volumeData&&volumeData.length>=21&&obv&&obv.length>=15){
-    var obvNow=obv[obv.length-1],obv14=obv[obv.length-15];
+  if(volumeData&&volumeData.length>=22&&obv&&obv.length>=16){
+    var obvNow=obv[obv.length-2],obv14=obv[obv.length-16];
     var obvUp=obvNow>obv14;
-    var volSum=0;for(var vi=volumeData.length-21;vi<volumeData.length-1;vi++)volSum+=volumeData[vi].volume;
+    var volSum=0;for(var vi=volumeData.length-22;vi<volumeData.length-2;vi++)volSum+=volumeData[vi].volume;
     var volMA20=volSum/20;
-    var volAbove=volumeData[volumeData.length-1].volume>volMA20;
+    var volAbove=volumeData[volumeData.length-2].volume>volMA20;
     if(obvUp&&volAbove)volPts=10;
+    else if(obvUp)volPts=5;
   }
   totalScore+=volPts;
   indicators.push({
     name:'Volume',
-    value:volPts>0?'CONFIRMED':'Unconfirmed',
+    value:volPts>=10?'CONFIRMED':volPts>=5?'PARTIAL':'Unconfirmed',
     pts:volPts,max:10,
-    status:volPts>0?'OBV UP + HIGH VOL':'Waiting',
-    color:volPts>0?'#22c55e':'#64748b',
+    status:volPts>=10?'OBV UP + HIGH VOL':volPts>=5?'OBV UP':'Waiting',
+    color:volPts>=10?'#22c55e':volPts>=5?'#86efac':'#64748b',
     desc:'OBV 14d slope + vol vs 20MA',
     buyZone:'OBV\u2191 + Vol>MA',sellZone:'--'
   });
