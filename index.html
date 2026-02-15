@@ -879,22 +879,24 @@ function scoreBuy(priceDev,fg,hrCap,fr,maLoaded,volumeData,obv){
 
   // 5. VOLUME CONFIRMATION (10 pts) - Bonus when OBV trending up AND volume above 20-MA
   // Uses last COMPLETED day (length-2) to avoid partial candle bias
-  var volPts=0;
+  var volPts=0;var volStatus='No Data';var obvUp=false;var volAbove=false;
   if(volumeData&&volumeData.length>=22&&obv&&obv.length>=16){
     var obvNow=obv[obv.length-2],obv14=obv[obv.length-16];
-    var obvUp=obvNow>obv14;
+    obvUp=obvNow>obv14;
     var volSum=0;for(var vi=volumeData.length-22;vi<volumeData.length-2;vi++)volSum+=volumeData[vi].volume;
     var volMA20=volSum/20;
-    var volAbove=volumeData[volumeData.length-2].volume>volMA20;
+    volAbove=volumeData[volumeData.length-2].volume>volMA20;
     if(obvUp&&volAbove)volPts=10;
     else if(obvUp)volPts=5;
+    // Diagnostic status
+    volStatus='OBV '+(obvUp?'\u2191':'\u2193')+' | Vol '+(volAbove?'>':'<')+' 20MA';
   }
   totalScore+=volPts;
   indicators.push({
     name:'Volume',
     value:volPts>=10?'CONFIRMED':volPts>=5?'PARTIAL':'Unconfirmed',
     pts:volPts,max:10,
-    status:volPts>=10?'OBV UP + HIGH VOL':volPts>=5?'OBV UP':'Waiting',
+    status:volPts>=10?'OBV UP + HIGH VOL':volStatus,
     color:volPts>=10?'#22c55e':volPts>=5?'#86efac':'#64748b',
     desc:'OBV 14d slope + vol vs 20MA',
     buyZone:'OBV\u2191 + Vol>MA',sellZone:'--'
@@ -962,22 +964,23 @@ function scoreSell(priceDev,fg,fr,rsi,maLoaded,volumeData,obv){
   });
 
   // 5. VOLUME CONFIRMATION (10 pts) - OBV declining AND high volume on down days
-  var volPts=0;
+  var volPts=0;var sVolStatus='No Data';var obvDown=false;var sVolAbove=false;
   if(volumeData&&volumeData.length>=22&&obv&&obv.length>=16){
     var obvNow=obv[obv.length-2],obv14=obv[obv.length-16];
-    var obvDown=obvNow<obv14;
+    obvDown=obvNow<obv14;
     var volSum=0;for(var vi=volumeData.length-22;vi<volumeData.length-2;vi++)volSum+=volumeData[vi].volume;
     var volMA20=volSum/20;
-    var volAbove=volumeData[volumeData.length-2].volume>volMA20;
-    if(obvDown&&volAbove)volPts=10;
+    sVolAbove=volumeData[volumeData.length-2].volume>volMA20;
+    if(obvDown&&sVolAbove)volPts=10;
     else if(obvDown)volPts=5;
+    sVolStatus='OBV '+(obvDown?'\u2193':'\u2191')+' | Vol '+(sVolAbove?'>':'<')+' 20MA';
   }
   totalScore+=volPts;
   indicators.push({
     name:'Volume',
     value:volPts>=10?'CONFIRMED':volPts>=5?'PARTIAL':'Unconfirmed',
     pts:volPts,max:10,
-    status:volPts>=10?'OBV DOWN + HIGH VOL':volPts>=5?'OBV DOWN':'Waiting',
+    status:volPts>=10?'OBV DOWN + HIGH VOL':sVolStatus,
     color:volPts>=10?'#ef4444':volPts>=5?'#fb923c':'#64748b',
     desc:'OBV 14d slope + vol vs 20MA',
     threshold:'OBV\u2193 + Vol>MA'
@@ -1378,7 +1381,7 @@ function render(){
     html+='<div class="ind-value" style="color:'+ind.color+'">'+ind.value+'</div>';
     html+='<div class="ind-status" style="color:'+ind.color+'">'+ind.status+' ('+ind.pts+'/'+ind.max+')</div>';
     html+='<div class="ind-meter"><div class="ind-fill" style="width:'+fillPct+'%;background:'+ind.color+'"></div></div>';
-    html+='<div class="ind-thresholds"><span>'+(ind.buyZone?'Buy: '+ind.buyZone:'')+'</span><span>'+(ind.threshold||ind.sellZone?'Sell: '+(ind.threshold||ind.sellZone):'')+'</span></div>';
+    html+='<div class="ind-thresholds"><span>'+(ind.buyZone&&ind.buyZone!=='--'?'Buy: '+ind.buyZone:'')+'</span><span>'+(ind.threshold&&ind.threshold!=='--'?ind.threshold:ind.sellZone&&ind.sellZone!=='--'?'Sell: '+ind.sellZone:'')+'</span></div>';
     html+='</div>';
   }
   html+='</div>';
