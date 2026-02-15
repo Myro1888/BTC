@@ -206,10 +206,12 @@ function parseMAcg(d){
   var l13=p.slice(-13),s13=0;for(var i=0;i<l13.length;i++)s13+=l13[i][1];var ma90d=s13/l13.length; // ~90 days
   var l4=p.slice(-4),s4=0;for(var i=0;i<l4.length;i++)s4+=l4[i][1];var ma30d=s4/l4.length; // ~30 days
   var l1=p.slice(-1);var ma7d=l1.length>0?l1[0][1]:0; // Most recent week as proxy
+  // ATH from full dataset
+  var ath=0;for(var i=0;i<p.length;i++)if(p[i][1]>ath)ath=p[i][1];
   // Weekly prices for chart
   var wp=p.slice(-52).map(function(x){return{d:new Date(x[0]).toLocaleDateString('en-US',{month:'short',day:'numeric'}),p:Math.round(x[1]),m:Math.round(ma200w)}});
-  var result={ma:ma200w,ma2y:ma2y,ma90d:ma90d,ma30d:ma30d,ma7d:ma7d,wp:wp};
-  C.set('ma',result);return{ma:ma200w,ma2y:ma2y,ma90d:ma90d,ma30d:ma30d,ma7d:ma7d,wp:wp,src:'CoinGecko'};
+  var result={ma:ma200w,ma2y:ma2y,ma90d:ma90d,ma30d:ma30d,ma7d:ma7d,ath:ath,wp:wp};
+  C.set('ma',result);return{ma:ma200w,ma2y:ma2y,ma90d:ma90d,ma30d:ma30d,ma7d:ma7d,ath:ath,wp:wp,src:'CoinGecko'};
 }
 
 function parseMAbin(data){
@@ -219,30 +221,46 @@ function parseMAbin(data){
   var l13=data.slice(-13),s13=0;for(var i=0;i<l13.length;i++)s13+=parseFloat(l13[i][4]);var ma90d=s13/l13.length;
   var l4=data.slice(-4),s4=0;for(var i=0;i<l4.length;i++)s4+=parseFloat(l4[i][4]);var ma30d=s4/l4.length;
   var l1=data.slice(-1);var ma7d=l1.length>0?parseFloat(l1[0][4]):0;
+  var ath=0;for(var i=0;i<data.length;i++){var h=parseFloat(data[i][2]);if(h>ath)ath=h;}
   var wp=data.slice(-52).map(function(x){return{d:new Date(x[0]).toLocaleDateString('en-US',{month:'short',day:'numeric'}),p:Math.round(parseFloat(x[4])),m:Math.round(ma200w)}});
-  var result={ma:ma200w,ma2y:ma2y,ma90d:ma90d,ma30d:ma30d,ma7d:ma7d,wp:wp};
-  C.set('ma',result);return{ma:ma200w,ma2y:ma2y,ma90d:ma90d,ma30d:ma30d,ma7d:ma7d,wp:wp,src:'Binance'};
+  var result={ma:ma200w,ma2y:ma2y,ma90d:ma90d,ma30d:ma30d,ma7d:ma7d,ath:ath,wp:wp};
+  C.set('ma',result);return{ma:ma200w,ma2y:ma2y,ma90d:ma90d,ma30d:ma30d,ma7d:ma7d,ath:ath,wp:wp,src:'Binance'};
 }
 
 function fetchMA(){
-  var c=C.get('ma',86400000);if(c&&!c.stale)return Promise.resolve({ma:c.value.ma,ma2y:c.value.ma2y||c.value.ma,ma90d:c.value.ma90d||c.value.ma,ma30d:c.value.ma30d||c.value.ma,ma7d:c.value.ma7d||c.value.ma,wp:c.value.wp,src:'Cached'});
+  var c=C.get('ma',86400000);if(c&&!c.stale)return Promise.resolve({ma:c.value.ma,ma2y:c.value.ma2y||c.value.ma,ma90d:c.value.ma90d||c.value.ma,ma30d:c.value.ma30d||c.value.ma,ma7d:c.value.ma7d||c.value.ma,ath:c.value.ath||0,wp:c.value.wp,src:'Cached'});
   var cgUrl='https://api.coingecko.com/api/v3/coins/bitcoin/market_chart?vs_currency=usd&days=1400&interval=weekly';
   var bnUrl='https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1w&limit=200';
   return fj(cgUrl,45000).then(parseMAcg).catch(function(){
     return fj(bnUrl,15000).then(parseMAbin);
   }).catch(function(){
     return new Promise(function(ok){setTimeout(ok,5000)}).then(function(){return fj(cgUrl,45000).then(parseMAcg)})
-  }).catch(function(){var f=C.any('ma');return f?{ma:f.value.ma,ma2y:f.value.ma2y||f.value.ma,ma90d:f.value.ma90d||f.value.ma,ma30d:f.value.ma30d||f.value.ma,ma7d:f.value.ma7d||f.value.ma,wp:f.value.wp,src:'Cached',stale:true,ct:f.ts}:{ma:0,ma2y:0,ma90d:0,ma30d:0,ma7d:0,wp:[],src:'N/A',err:true}})
+  }).catch(function(){var f=C.any('ma');return f?{ma:f.value.ma,ma2y:f.value.ma2y||f.value.ma,ma90d:f.value.ma90d||f.value.ma,ma30d:f.value.ma30d||f.value.ma,ma7d:f.value.ma7d||f.value.ma,ath:f.value.ath||0,wp:f.value.wp,src:'Cached',stale:true,ct:f.ts}:{ma:0,ma2y:0,ma90d:0,ma30d:0,ma7d:0,ath:0,wp:[],src:'N/A',err:true}})
 }
 
 function fetchFG(){
-  var c=C.get('fg',86400000);if(c&&!c.stale)return Promise.resolve({val:c.value.val,txt:c.value.txt,src:'Cached'});
-  return fj('https://api.alternative.me/fng/?limit=1').then(function(d){var v={val:parseInt(d.data[0].value,10),txt:d.data[0].value_classification};C.set('fg',v);return{val:v.val,txt:v.txt,src:'Alternative.me'}}).catch(function(){var f=C.any('fg');return f?{val:f.value.val,txt:f.value.txt,src:'Cached',stale:true,ct:f.ts}:{val:50,txt:'Neutral',src:'N/A',err:true}})
+  var c=C.get('fg',86400000);if(c&&!c.stale)return Promise.resolve({val:c.value.val,val7d:c.value.val7d,txt:c.value.txt,src:'Cached'});
+  return fj('https://api.alternative.me/fng/?limit=7').then(function(d){
+    var today=parseInt(d.data[0].value,10);
+    var sum=0;for(var i=0;i<d.data.length;i++)sum+=parseInt(d.data[i].value,10);
+    var avg7d=Math.round(sum/d.data.length);
+    var v={val:today,val7d:avg7d,txt:d.data[0].value_classification};
+    C.set('fg',v);return{val:v.val,val7d:avg7d,txt:v.txt,src:'Alternative.me'};
+  }).catch(function(){var f=C.any('fg');return f?{val:f.value.val,val7d:f.value.val7d||f.value.val,txt:f.value.txt,src:'Cached',stale:true,ct:f.ts}:{val:50,val7d:50,txt:'Neutral',src:'N/A',err:true}})
 }
 
 function fetchFR(){
-  var c=C.get('fr',300000);if(c&&!c.stale)return Promise.resolve({rate:c.value,src:'Cached'});
-  return fj('https://fapi.binance.com/fapi/v1/fundingRate?symbol=BTCUSDT&limit=1').then(function(d){var r=parseFloat(d[0].fundingRate);C.set('fr',r);return{rate:r,src:'Binance'}}).catch(function(){var f=C.any('fr');return f?{rate:f.value,src:'Cached',stale:true,ct:f.ts}:{rate:0,src:'N/A',err:true}})
+  var c=C.get('fr',300000);if(c&&!c.stale)return Promise.resolve({rate:c.value.rate,avg:c.value.avg,src:'Cached'});
+  return fj('https://fapi.binance.com/fapi/v1/fundingRate?symbol=BTCUSDT&limit=3').then(function(d){
+    var latest=parseFloat(d[d.length-1].fundingRate);
+    var sum=0;for(var i=0;i<d.length;i++)sum+=parseFloat(d[i].fundingRate);
+    var avg=sum/d.length;
+    var v={rate:latest,avg:avg};C.set('fr',v);return{rate:latest,avg:avg,src:'Binance'};
+  }).catch(function(){var f=C.any('fr');
+    var fv=f?f.value:{rate:0,avg:0};
+    if(typeof fv==='number')fv={rate:fv,avg:fv}; // migrate old cache format
+    return f?{rate:fv.rate,avg:fv.avg||fv.rate,src:'Cached',stale:true,ct:f.ts}:{rate:0,avg:0,src:'N/A',err:true};
+  })
 }
 
 function fetchHR(){
@@ -511,16 +529,6 @@ function calcTrendStrength(closes,period,highs,lows){
   return Math.min(100,Math.max(0,dx));
 }
 
-// Calculate MA Slope (rate of change)
-function calcSlope(data,period){
-  if(data.length<period)return 0;
-  var ma=calcSMA(data,period);
-  var curr=ma[ma.length-1];
-  var prev=ma[ma.length-period]||ma[0];
-  if(!curr||!prev)return 0;
-  return((curr-prev)/prev)*100;
-}
-
 // Main Trend Analysis for each timeframe
 function analyzeTrend(data,price,period,emaShort,emaLong,smaShort,smaLong,highs,lows){
   var ema1=calcEMA(data,emaShort);
@@ -606,12 +614,12 @@ function analyzeTrend(data,price,period,emaShort,emaLong,smaShort,smaLong,highs,
 // ═══════ BEAR MARKET REVERSAL DETECTION ═══════
 // Detects bottom reversal signals before recommending buys in downtrends
 // Prevents knife-catching by requiring confirmation before heavy accumulation
-function detectReversals(closes,price){
+function detectReversals(closes,price,volumeData){
   if(!closes||closes.length<50)return{signals:[],score:0,confirmed:false};
   var signals=[];
   var score=0;
 
-  // 1. MACD BULLISH CROSSOVER (25 pts)
+  // 1. MACD BULLISH CROSSOVER (20 pts)
   // Histogram turning from negative to positive = momentum shifting
   var macd=calcMACD(closes);
   var prevCloses=closes.slice(0,-1);
@@ -620,16 +628,16 @@ function detectReversals(closes,price){
   var macdImproving=macd.hist>prevMacd.hist&&prevMacd.hist<0;
 
   if(macdCross){
-    signals.push({name:'MACD Crossover',desc:'MACD crossed above signal line',active:true,pts:25});
-    score+=25;
+    signals.push({name:'MACD Crossover',desc:'MACD crossed above signal line',active:true,pts:20});
+    score+=20;
   }else if(macdImproving){
-    signals.push({name:'MACD Improving',desc:'Bearish momentum weakening',active:true,pts:15});
-    score+=15;
+    signals.push({name:'MACD Improving',desc:'Bearish momentum weakening',active:true,pts:12});
+    score+=12;
   }else{
     signals.push({name:'MACD Crossover',desc:'Waiting for bullish cross',active:false,pts:0});
   }
 
-  // 2. RSI BULLISH DIVERGENCE (25 pts)
+  // 2. RSI BULLISH DIVERGENCE (20 pts)
   // Price making lower lows but RSI making higher lows = hidden strength
   var rsi=calcRSI(closes,14);
   var priceLows=[];
@@ -645,20 +653,20 @@ function detectReversals(closes,price){
     if(lastLow.price<prevLow.price&&lastLow.rsi>prevLow.rsi)bullDiv=true;
   }
   if(bullDiv){
-    signals.push({name:'RSI Divergence',desc:'Price lower low + RSI higher low',active:true,pts:25});
-    score+=25;
+    signals.push({name:'RSI Divergence',desc:'Price lower low + RSI higher low',active:true,pts:20});
+    score+=20;
   }else{
     var currRsi=rsi[rsi.length-1]||50;
     var prevRsi2=rsi[rsi.length-6]||50;
     if(currRsi>prevRsi2&&currRsi<50&&currRsi>30){
-      signals.push({name:'RSI Recovery',desc:'RSI recovering from oversold',active:true,pts:10});
-      score+=10;
+      signals.push({name:'RSI Recovery',desc:'RSI recovering from oversold',active:true,pts:8});
+      score+=8;
     }else{
       signals.push({name:'RSI Divergence',desc:'No bullish divergence yet',active:false,pts:0});
     }
   }
 
-  // 3. PRICE RECLAIMING 21 EMA (20 pts)
+  // 3. PRICE RECLAIMING 21 EMA (15 pts)
   // Price crossing back above 21 EMA = bears losing control
   var ema21=calcEMA(closes,21);
   var currEma21=ema21[ema21.length-1];
@@ -668,38 +676,69 @@ function detectReversals(closes,price){
   var aboveEma=currPrice>currEma21;
 
   if(emaReclaim){
-    signals.push({name:'EMA Reclaim',desc:'Price reclaimed 21 EMA',active:true,pts:20});
-    score+=20;
-  }else if(aboveEma){
-    signals.push({name:'Above 21 EMA',desc:'Holding above 21 EMA',active:true,pts:15});
+    signals.push({name:'EMA Reclaim',desc:'Price reclaimed 21 EMA',active:true,pts:15});
     score+=15;
+  }else if(aboveEma){
+    signals.push({name:'Above 21 EMA',desc:'Holding above 21 EMA',active:true,pts:10});
+    score+=10;
   }else{
     signals.push({name:'EMA Reclaim',desc:'Price still below 21 EMA',active:false,pts:0});
   }
 
-  // 4. HIGHER LOW FORMATION (20 pts)
+  // 4. HIGHER LOW FORMATION (15 pts)
   // Trend structure shifting from lower lows to higher lows = bottom forming
   var structure=calcTrendStructure(closes,30);
   if(structure.hl>0&&structure.ll===0){
-    signals.push({name:'Higher Low',desc:'Confirmed higher low pattern',active:true,pts:20});
-    score+=20;
+    signals.push({name:'Higher Low',desc:'Confirmed higher low pattern',active:true,pts:15});
+    score+=15;
   }else if(structure.hl>0){
-    signals.push({name:'Higher Low',desc:'Higher low forming (not confirmed)',active:true,pts:10});
-    score+=10;
+    signals.push({name:'Higher Low',desc:'Higher low forming (not confirmed)',active:true,pts:8});
+    score+=8;
   }else{
     signals.push({name:'Higher Low',desc:'Still making lower lows',active:false,pts:0});
   }
 
-  // 5. MOMENTUM SHIFT (10 pts)
+  // 5. VOLUME CAPITULATION (15 pts)
+  // Spike in volume on down day followed by declining volume = selling exhaustion
+  var volCap=false,volDecline=false;
+  if(volumeData&&volumeData.length>=22){
+    // Calculate 20-day volume average (excluding last 2 to avoid partial)
+    var volSum=0;for(var vi=volumeData.length-22;vi<volumeData.length-2;vi++)volSum+=volumeData[vi].volume;
+    var volMA20=volSum/20;
+    // Look for a volume spike (>2x avg) on a down day in last 14 days
+    for(var vi=volumeData.length-15;vi<volumeData.length-2;vi++){
+      if(vi>0&&volumeData[vi].volume>volMA20*2&&closes[vi]<closes[vi-1]){
+        volCap=true;break;
+      }
+    }
+    // Check if recent volume is declining (last 5 days avg < previous 5 days avg)
+    if(volumeData.length>=12){
+      var recent5=0,prev5=0;
+      for(var vi=volumeData.length-7;vi<volumeData.length-2;vi++)recent5+=volumeData[vi].volume;
+      for(var vi=volumeData.length-12;vi<volumeData.length-7;vi++)prev5+=volumeData[vi].volume;
+      volDecline=recent5<prev5*0.85; // 15%+ decline
+    }
+  }
+  if(volCap&&volDecline){
+    signals.push({name:'Vol Capitulation',desc:'Volume spike + declining selling pressure',active:true,pts:15});
+    score+=15;
+  }else if(volCap){
+    signals.push({name:'Vol Spike',desc:'Capitulation volume seen, watching for decline',active:true,pts:8});
+    score+=8;
+  }else{
+    signals.push({name:'Vol Capitulation',desc:'No capitulation volume detected',active:false,pts:0});
+  }
+
+  // 6. MOMENTUM SHIFT (15 pts)
   // RSI crossing above 50 = momentum flipping from bearish to bullish
   var rsiNow=rsi[rsi.length-1]||50;
   var rsiPrev=rsi[rsi.length-2]||50;
   if(rsiNow>=50&&rsiPrev<50){
-    signals.push({name:'Momentum Shift',desc:'RSI crossed above 50',active:true,pts:10});
-    score+=10;
+    signals.push({name:'Momentum Shift',desc:'RSI crossed above 50',active:true,pts:15});
+    score+=15;
   }else if(rsiNow>=45){
-    signals.push({name:'Momentum Building',desc:'RSI approaching neutral',active:true,pts:5});
-    score+=5;
+    signals.push({name:'Momentum Building',desc:'RSI approaching neutral',active:true,pts:7});
+    score+=7;
   }else{
     signals.push({name:'Momentum Shift',desc:'RSI still below 50',active:false,pts:0});
   }
@@ -715,10 +754,10 @@ function detectReversals(closes,price){
 // ═══════ OPTIMIZED CALCULATION FUNCTIONS ═══════
 //
 // DESIGN PHILOSOPHY: Buy Fear, Sell Euphoria
-// - 4 uncorrelated indicators for buy signals
-// - 4 uncorrelated indicators for sell signals
+// - 5 indicators for buy signals (4 core + volume confirmation, 110 max)
+// - 5 indicators for sell signals (4 core + volume confirmation, 110 max)
 // - Single Market Cycle gauge (0=max fear, 100=max euphoria)
-// - Historical accuracy weighting
+// - 5-component cycle: PriceDev 35% + F&G 25% + HashRibbons 20% + Funding 10% + RSI 10%
 //
 
 // ═══════ PRICE DEVIATION INDEX ═══════
@@ -741,7 +780,7 @@ function calcPriceDeviation(p,ma){
 
 // ═══════ MARKET CYCLE GAUGE ═══════
 // Single 0-100 reading: 0=Extreme Fear (buy), 100=Extreme Euphoria (sell)
-// Weighted composite of 4 uncorrelated signals
+// Weighted composite of 5 components
 function calcMarketCycle(priceDev,fg,hrCap,fr,rsi,hrMa30,hrMa60){
   // Price Deviation: 35% weight (most reliable historically)
   var pdScore=priceDev;
@@ -1094,6 +1133,31 @@ function buildChart(data,dailyVol,dailyCloses){
       }
     }
   }
+  // Bollinger Bands (20-period, 2 std dev)
+  var bbPeriod=20;
+  if(prices.length>=bbPeriod){
+    var bbUpper=[],bbLower=[],bbMid=[];
+    for(var i=0;i<prices.length;i++){
+      if(i<bbPeriod-1){bbUpper.push(null);bbLower.push(null);bbMid.push(null);continue;}
+      var bbSum=0;for(var j=0;j<bbPeriod;j++)bbSum+=prices[i-j];
+      var bbMa=bbSum/bbPeriod;
+      var bbVar=0;for(var j=0;j<bbPeriod;j++)bbVar+=Math.pow(prices[i-j]-bbMa,2);
+      var bbStd=Math.sqrt(bbVar/bbPeriod);
+      bbMid.push(bbMa);bbUpper.push(bbMa+2*bbStd);bbLower.push(bbMa-2*bbStd);
+    }
+    // Draw bands as filled area
+    var ubPts=[],lbPts=[];
+    for(var i=0;i<prices.length;i++){
+      if(bbUpper[i]!==null){ubPts.push(x(i)+','+y(bbUpper[i]));lbPts.push(x(i)+','+y(bbLower[i]));}
+    }
+    if(ubPts.length>1){
+      var bbArea='M'+ubPts.join('L')+'L'+lbPts.reverse().join('L')+'Z';
+      svg+='<path d="'+bbArea+'" fill="rgba(147,51,234,0.07)" stroke="none"/>';
+      svg+='<path d="M'+ubPts.join('L')+'" fill="none" stroke="rgba(147,51,234,0.4)" stroke-width="1" stroke-dasharray="3 2"/>';
+      lbPts.reverse();
+      svg+='<path d="M'+lbPts.join('L')+'" fill="none" stroke="rgba(147,51,234,0.4)" stroke-width="1" stroke-dasharray="3 2"/>';
+    }
+  }
   svg+='<path d="'+ap+'" fill="url(#af)"/>';
   svg+='<path d="'+pp+'" fill="none" stroke="#3b82f6" stroke-width="2"/>';
   svg+='<path d="'+mp+'" fill="none" stroke="#f59e0b" stroke-width="2" stroke-dasharray="6 3"/>';
@@ -1165,7 +1229,7 @@ function buildGauge(sc,max,color){
 }
 
 // ═══════ RENDER ═══════
-var state={price:{price:0,src:''},ma:{ma:0,ma2y:0,ma90d:0,ma30d:0,ma7d:0,wp:[]},fg:{val:50,txt:'Neutral'},fr:{rate:0},hr:{cap:false},daily:{price:0,closes:[],highs:[],lows:[],volumeData:[],obv:[],ema7:0,ema21:0,sma50:0,sma200:0,rsi:50,cross:'none',price7d:0,price30d:0,price90d:0},lastUp:null,countdown:60};
+var state={price:{price:0,src:''},ma:{ma:0,ma2y:0,ma90d:0,ma30d:0,ma7d:0,wp:[]},fg:{val:50,val7d:50,txt:'Neutral'},fr:{rate:0,avg:0},hr:{cap:false},daily:{price:0,closes:[],highs:[],lows:[],volumeData:[],obv:[],ema7:0,ema21:0,sma50:0,sma200:0,rsi:50,cross:'none',price7d:0,price30d:0,price90d:0},lastUp:null,countdown:60};
 
 function render(){
   var p=state.price,ma=state.ma,fg=state.fg,fr=state.fr,hr=state.hr,daily=state.daily;
@@ -1175,11 +1239,14 @@ function render(){
   // ═══════ CORE CALCULATIONS ═══════
   var priceDev=calcPriceDeviation(p.price,ma.ma);
   var rsi=daily.rsi||50;
-  var cycle=calcMarketCycle(priceDev,fg.val,hr.cap,fr.rate,rsi,hr.ma30||0,hr.ma60||0);
+  var fg7d=fg.val7d||fg.val; // 7-day average for scoring (reduces noise)
+  var frAvg=fr.avg||fr.rate; // Averaged funding rate
+  var cycle=calcMarketCycle(priceDev,fg7d,hr.cap,frAvg,rsi,hr.ma30||0,hr.ma60||0);
 
   // Get scores from optimized 5-indicator system (4 core + volume confirmation)
-  var buyRes=scoreBuy(priceDev,fg.val,hr.cap,fr.rate,maLoaded,daily.volumeData,daily.obv);
-  var sellRes=scoreSell(priceDev,fg.val,fr.rate,rsi,maLoaded,daily.volumeData,daily.obv);
+  // Uses 7d F&G avg and averaged funding rate for more stable signals
+  var buyRes=scoreBuy(priceDev,fg7d,hr.cap,frAvg,maLoaded,daily.volumeData,daily.obv);
+  var sellRes=scoreSell(priceDev,fg7d,frAvg,rsi,maLoaded,daily.volumeData,daily.obv);
 
   // Trend analysis for smart buy/sell filtering
   var trendCloses=daily.closes||[];
@@ -1192,7 +1259,7 @@ function render(){
   var trendScoreEarly=(shortTrendEarly.score*0.25)+(medTrendEarly.score*0.35)+(longTrendEarly.score*0.40);
 
   // Reversal detection (only meaningful in bear trends)
-  var reversal=hasTrendDataEarly?detectReversals(trendCloses,p.price):{signals:[],score:0,confirmed:false,activeCount:0};
+  var reversal=hasTrendDataEarly?detectReversals(trendCloses,p.price,daily.volumeData):{signals:[],score:0,confirmed:false,activeCount:0};
 
   var action=getAction(cycle,buyRes.score,sellRes.score,trendScoreEarly,reversal);
 
@@ -1238,7 +1305,9 @@ function render(){
   // ═══════ ACTION PANEL ═══════
   html+='<div class="action-panel">';
   // Price Box
-  html+='<div class="action-box"><div class="label">BTC Price</div><div class="value" style="color:#fff">'+fp(p.price)+'</div><div class="sub">vs 200W MA: '+(maLoaded?(priceDev).toFixed(0)+'%':'--')+'</div></div>';
+  var athPct=ma.ath>0?((p.price-ma.ath)/ma.ath)*100:0;
+  var athStr=ma.ath>0?' \u2022 ATH: '+(athPct>=0?'+':'')+athPct.toFixed(1)+'%':'';
+  html+='<div class="action-box"><div class="label">BTC Price</div><div class="value" style="color:#fff">'+fp(p.price)+'</div><div class="sub">vs 200W MA: '+(maLoaded?(priceDev).toFixed(0)+'%':'--')+athStr+'</div></div>';
   // Action Box
   var actionClass=action.allocation>0?(cycle<=50?'active':'active-sell'):'';
   html+='<div class="action-box '+actionClass+'"><div class="label">Recommended Action</div><div class="value" style="color:'+action.color+'">'+action.action+'</div><div class="sub">'+action.desc+'</div></div>';
@@ -1260,6 +1329,14 @@ function render(){
   else if(buyRes.score>=22){buyLabel='ACCUMULATE';buyLabelColor='#eab308';}
   else{buyLabel='HOLD';buyLabelColor='#64748b';}
 
+  // Sell score classification (scaled to 110 max)
+  var sellLabel,sellLabelColor;
+  if(sellRes.score>=88){sellLabel='EXTREME SELL';sellLabelColor='#ef4444';}
+  else if(sellRes.score>=66){sellLabel='STRONG SELL';sellLabelColor='#f97316';}
+  else if(sellRes.score>=44){sellLabel='SELL';sellLabelColor='#fb923c';}
+  else if(sellRes.score>=22){sellLabel='REDUCE';sellLabelColor='#eab308';}
+  else{sellLabel='HOLD';sellLabelColor='#64748b';}
+
   var buyPct=Math.round(buyRes.score/buyRes.max*100);
   var sellPct=Math.round(sellRes.score/sellRes.max*100);
 
@@ -1278,26 +1355,30 @@ function render(){
     html+='<div class="indicator-dot"><div class="dot '+dotClass+'"></div><div class="name">'+ind.name+'</div></div>';
   }
   html+='</div>';
-  // Buy score classification bar
+  // Score classification bar (buy or sell depending on cycle zone)
+  html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding:8px 12px;background:#0f172a;border-radius:6px">';
   if(cycle<=50){
-    html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding:8px 12px;background:#0f172a;border-radius:6px">';
     html+='<span style="font-size:10px;color:#64748b">Buy Score: <strong style="color:#cbd5e1">'+buyRes.score+'/'+buyRes.max+'</strong></span>';
     html+='<span style="font-size:11px;font-weight:bold;color:'+buyLabelColor+'">'+buyLabel+'</span>';
-    html+='</div>';
+  }else{
+    html+='<span style="font-size:10px;color:#64748b">Sell Score: <strong style="color:#cbd5e1">'+sellRes.score+'/'+sellRes.max+'</strong></span>';
+    html+='<span style="font-size:11px;font-weight:bold;color:'+sellLabelColor+'">'+sellLabel+'</span>';
   }
   html+='</div>';
+  html+='</div>';
 
-  // ═══════ BUY INDICATORS (5 cards) ═══════
+  // ═══════ INDICATOR CARDS (5 cards - buy or sell based on cycle) ═══════
+  var cardIndicators=cycle<=50?buyRes.indicators:sellRes.indicators;
   html+='<div class="indicators-grid">';
-  for(var i=0;i<buyRes.indicators.length;i++){
-    var ind=buyRes.indicators[i];
+  for(var i=0;i<cardIndicators.length;i++){
+    var ind=cardIndicators[i];
     var fillPct=(ind.pts/ind.max)*100;
     html+='<div class="ind-card">';
     html+='<div class="ind-name">'+ind.name+'<span class="ind-weight">'+ind.max+' pts</span></div>';
     html+='<div class="ind-value" style="color:'+ind.color+'">'+ind.value+'</div>';
     html+='<div class="ind-status" style="color:'+ind.color+'">'+ind.status+' ('+ind.pts+'/'+ind.max+')</div>';
     html+='<div class="ind-meter"><div class="ind-fill" style="width:'+fillPct+'%;background:'+ind.color+'"></div></div>';
-    html+='<div class="ind-thresholds"><span>Buy: '+ind.buyZone+'</span><span>Sell: '+ind.sellZone+'</span></div>';
+    html+='<div class="ind-thresholds"><span>'+(ind.buyZone?'Buy: '+ind.buyZone:'')+'</span><span>'+(ind.threshold||ind.sellZone?'Sell: '+(ind.threshold||ind.sellZone):'')+'</span></div>';
     html+='</div>';
   }
   html+='</div>';
@@ -1450,7 +1531,7 @@ function render(){
     // Reversal confidence meter
     var rmColor=reversal.score>=60?'#22c55e':reversal.score>=30?'#eab308':'#ef4444';
     html+='<div class="reversal-meter">';
-    html+='<div class="rm-header"><span class="rm-title">Reversal Confidence</span><span class="rm-value" style="color:'+rmColor+'">'+reversal.score+'/100 ('+reversal.activeCount+'/5 signals)</span></div>';
+    html+='<div class="rm-header"><span class="rm-title">Reversal Confidence</span><span class="rm-value" style="color:'+rmColor+'">'+reversal.score+'/100 ('+reversal.activeCount+'/6 signals)</span></div>';
     html+='<div class="rm-track"><div class="rm-fill" style="width:'+reversal.score+'%;background:'+rmColor+'"></div><div class="rm-threshold" style="left:60%"></div></div>';
     html+='<div class="rm-note">'+(reversal.confirmed?'<strong style="color:#22c55e">REVERSAL CONFIRMED</strong> - Score above 60 threshold. Buy signals are now active.':reversal.score>0?'<strong style="color:#eab308">EARLY SIGNS</strong> - Some reversal signals present but not enough for confirmation. Accumulate cautiously.':'<strong style="color:#ef4444">NO REVERSAL</strong> - Downtrend intact. Avoid buying - wait for bottom signals to appear.')+'</div>';
     html+='</div>';
@@ -1497,6 +1578,14 @@ function render(){
   html+='<div class="pa-row"><span>50/200 SMA</span><span>'+fp(daily.sma50)+' / '+fp(daily.sma200)+'</span></div>';
   html+='</div></div>';
 
+  // Weekly RSI from chart data
+  var weeklyRsi=50;
+  if(ma.wp&&ma.wp.length>=16){
+    var wpCloses=ma.wp.map(function(w){return w.p});
+    var wRsi=calcRSI(wpCloses,14);
+    weeklyRsi=wRsi[wRsi.length-1]||50;
+  }
+
   // Long-term (multi-indicator composite instead of 200WMA-only)
   var longPct=ma.ma>0?((p.price-ma.ma)/ma.ma)*100:0;
   // Composite long-term score: 200WMA position + death/golden cross + price vs 200d SMA + 90d momentum
@@ -1518,8 +1607,9 @@ function render(){
   html+='<div class="pa-main"><span class="pa-signal" style="color:'+longColor+'">'+longDir+'</span><span class="pa-label" style="color:'+longColor+'">'+longLabel+'</span></div>';
   html+='<div class="pa-details">';
   html+='<div class="pa-row"><span>200W MA</span><span>'+fp(ma.ma)+'</span></div>';
+  html+='<div class="pa-row"><span>ATH Distance</span><span style="color:'+(athPct>-10?'#22c55e':athPct>-40?'#eab308':'#ef4444')+'">'+(ma.ath>0?fp(ma.ath)+' ('+(athPct>=0?'+':'')+athPct.toFixed(1)+'%)':'--')+'</span></div>';
+  html+='<div class="pa-row"><span>Weekly RSI</span><span style="color:'+(weeklyRsi<30?'#22c55e':weeklyRsi>70?'#ef4444':'#eab308')+'">'+weeklyRsi.toFixed(0)+(weeklyRsi<30?' (Oversold)':weeklyRsi>70?' (Overbought)':'')+'</span></div>';
   html+='<div class="pa-row"><span>90D Change</span><span style="color:'+(chg90d>=0?'#22c55e':'#ef4444')+'">'+(chg90d>=0?'+':'')+chg90d.toFixed(1)+'%</span></div>';
-  html+='<div class="pa-row"><span>Cycle</span><span>'+priceDev.toFixed(0)+'% (0=bottom, 100=top)</span></div>';
   html+='</div></div>';
 
   html+='</div>';
@@ -1570,7 +1660,7 @@ function render(){
   html+='<div class="chart-card">';
   html+='<div class="chart-title">52-Week Price vs 200-Week MA</div>';
   html+=buildChart(ma.wp,daily.volumeData,daily.closes);
-  html+='<div class="chart-legend"><span><span class="dot" style="background:#3b82f6"></span>BTC Price</span><span><span class="dot" style="background:#f59e0b"></span>200W MA</span><span><span class="dot" style="background:rgba(34,197,94,0.5)"></span>Volume (green=up)</span><span><span class="dot" style="background:rgba(239,68,68,0.5)"></span>Volume (red=down)</span></div>';
+  html+='<div class="chart-legend"><span><span class="dot" style="background:#3b82f6"></span>BTC Price</span><span><span class="dot" style="background:#f59e0b"></span>200W MA</span><span><span class="dot" style="background:rgba(147,51,234,0.5)"></span>Bollinger Bands</span><span><span class="dot" style="background:rgba(34,197,94,0.5)"></span>Vol (up)</span><span><span class="dot" style="background:rgba(239,68,68,0.5)"></span>Vol (down)</span></div>';
   html+='<div style="margin-top:8px"><div style="font-size:10px;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">On-Balance Volume (OBV)</div>';
   html+=buildOBVChart(daily.obv);
   html+='</div>';
