@@ -256,12 +256,14 @@ function fetchHR(){
 
 // ═══════ DAILY PRICE DATA FOR TECHNICAL ANALYSIS ═══════
 function fetchDaily(){
-  var c=C.get('daily',3600000);if(c&&!c.stale&&c.value.volumeData)return Promise.resolve(c.value);
+  var c=C.get('daily',3600000);if(c&&!c.stale&&c.value.volumeData&&c.value.highs)return Promise.resolve(c.value);
   // Fetch 365 days of daily data from Binance
   return fj('https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1d&limit=365',15000).then(function(data){
     if(!data||data.length<200)throw new Error('insufficient daily data');
-    // Extract close prices
+    // Extract OHLC prices
     var closes=data.map(function(k){return parseFloat(k[4])});
+    var highs=data.map(function(k){return parseFloat(k[2])});
+    var lows=data.map(function(k){return parseFloat(k[3])});
     // Extract volume data and calculate OBV from raw klines
     var volumeData=extractVolumeData(data);
     var obv=calculateOBV(data);
@@ -279,6 +281,8 @@ function fetchDaily(){
     var result={
       price:current,
       closes:closes, // Raw closes for trend analysis
+      highs:highs, // Daily highs for true range
+      lows:lows, // Daily lows for true range
       volumeData:volumeData, // Daily volume data
       obv:obv, // On-Balance Volume series
       ema7:ema7[ema7.length-1],
@@ -304,8 +308,8 @@ function fetchDaily(){
     return result;
   }).catch(function(){
     var f=C.any('daily');
-    if(f){if(!f.value.volumeData)f.value.volumeData=[];if(!f.value.obv)f.value.obv=[];return f.value;}
-    return{price:0,closes:[],volumeData:[],obv:[],ema7:0,ema21:0,sma50:0,sma200:0,rsi:50,cross:'none',ema7Prev:0,ema21Prev:0,sma50Prev:0,pricePrev:0,price7d:0,price30d:0,price90d:0,src:'N/A',err:true};
+    if(f){if(!f.value.volumeData)f.value.volumeData=[];if(!f.value.obv)f.value.obv=[];if(!f.value.highs)f.value.highs=[];if(!f.value.lows)f.value.lows=[];return f.value;}
+    return{price:0,closes:[],highs:[],lows:[],volumeData:[],obv:[],ema7:0,ema21:0,sma50:0,sma200:0,rsi:50,cross:'none',ema7Prev:0,ema21Prev:0,sma50Prev:0,pricePrev:0,price7d:0,price30d:0,price90d:0,src:'N/A',err:true};
   });
 }
 
@@ -334,7 +338,7 @@ function calcEMA(data,period){
   return result;
 }
 
-// Calculate RSI (Relative Strength Index)
+// Calculate RSI (Relative Strength Index) using Wilder's smoothing
 function calcRSI(data,period){
   var result=[];
   var gains=[],losses=[];
@@ -343,11 +347,19 @@ function calcRSI(data,period){
     gains.push(change>0?change:0);
     losses.push(change<0?-change:0);
   }
+  var avgGain=0,avgLoss=0;
   for(var i=0;i<gains.length;i++){
     if(i<period-1){result.push(50);continue;}
-    var avgGain=0,avgLoss=0;
-    for(var j=0;j<period;j++){avgGain+=gains[i-j];avgLoss+=losses[i-j];}
-    avgGain/=period;avgLoss/=period;
+    if(i===period-1){
+      // First RSI: simple average for seed
+      var gSum=0,lSum=0;
+      for(var j=0;j<period;j++){gSum+=gains[i-j];lSum+=losses[i-j];}
+      avgGain=gSum/period;avgLoss=lSum/period;
+    }else{
+      // Wilder's smoothing: prevAvg*(n-1)+current / n
+      avgGain=(avgGain*(period-1)+gains[i])/period;
+      avgLoss=(avgLoss*(period-1)+losses[i])/period;
+    }
     if(avgLoss===0){result.push(100);continue;}
     var rs=avgGain/avgLoss;
     result.push(100-(100/(1+rs)));
@@ -461,35 +473,41 @@ function calcTrendStructure(data,period){
   return{structure:structure,score:score,hh:hhCount,hl:hlCount,lh:lhCount,ll:llCount};
 }
 
-// Calculate Trend Strength (ADX-like, 0-100)
-function calcTrendStrength(data,period){
-  if(data.length<period+1)return 50;
-  var recent=data.slice(-period);
-  // Calculate directional movement
+// Calculate Trend Strength (ADX-like, 0-100) using True Range
+function calcTrendStrength(closes,period,highs,lows){
+  if(closes.length<period+1)return 50;
+  var n=period;
+  var cR=closes.slice(-n-1);
+  var hR=highs&&highs.length>=closes.length?highs.slice(-n-1):null;
+  var lR=lows&&lows.length>=closes.length?lows.slice(-n-1):null;
+  // Calculate directional movement and true range
   var upMoves=[],downMoves=[],trueRanges=[];
-  for(var i=1;i<recent.length;i++){
-    var up=recent[i]-recent[i-1];
-    var down=recent[i-1]-recent[i];
-    upMoves.push(up>0&&up>down?up:0);
-    downMoves.push(down>0&&down>up?down:0);
-    trueRanges.push(Math.abs(recent[i]-recent[i-1]));
+  for(var i=1;i<cR.length;i++){
+    var hi=hR?hR[i]:cR[i];
+    var lo=lR?lR[i]:cR[i];
+    var prevC=cR[i-1];
+    var prevHi=hR?hR[i-1]:cR[i-1];
+    var prevLo=lR?lR[i-1]:cR[i-1];
+    // True Range = max(H-L, |H-prevC|, |L-prevC|)
+    var tr=Math.max(hi-lo,Math.abs(hi-prevC),Math.abs(lo-prevC));
+    // Directional movement
+    var upMove=hi-prevHi;
+    var downMove=prevLo-lo;
+    upMoves.push(upMove>0&&upMove>downMove?upMove:0);
+    downMoves.push(downMove>0&&downMove>upMove?downMove:0);
+    trueRanges.push(tr);
   }
-  // Average
+  // Wilder's smoothing for averages
   var avgUp=0,avgDown=0,avgTR=0;
-  for(var i=0;i<upMoves.length;i++){
-    avgUp+=upMoves[i];
-    avgDown+=downMoves[i];
-    avgTR+=trueRanges[i];
-  }
-  avgUp/=upMoves.length;
-  avgDown/=downMoves.length;
-  avgTR/=trueRanges.length;
+  for(var i=0;i<Math.min(n,upMoves.length);i++){avgUp+=upMoves[i];avgDown+=downMoves[i];avgTR+=trueRanges[i];}
+  avgUp/=n;avgDown/=n;avgTR/=n;
   if(avgTR===0)return 50;
 
   var pdi=(avgUp/avgTR)*100;
   var ndi=(avgDown/avgTR)*100;
-  var dx=Math.abs(pdi-ndi)/(pdi+ndi)*100;
-  // ADX is smoothed DX, simplified here
+  var sum=pdi+ndi;
+  if(sum===0)return 50;
+  var dx=Math.abs(pdi-ndi)/sum*100;
   return Math.min(100,Math.max(0,dx));
 }
 
@@ -504,7 +522,7 @@ function calcSlope(data,period){
 }
 
 // Main Trend Analysis for each timeframe
-function analyzeTrend(data,price,period,emaShort,emaLong,smaShort,smaLong){
+function analyzeTrend(data,price,period,emaShort,emaLong,smaShort,smaLong,highs,lows){
   var ema1=calcEMA(data,emaShort);
   var ema2=calcEMA(data,emaLong);
   var sma1=calcSMA(data,smaShort);
@@ -512,7 +530,7 @@ function analyzeTrend(data,price,period,emaShort,emaLong,smaShort,smaLong){
   var rsi=calcRSI(data,14);
   var macd=calcMACD(data);
   var structure=calcTrendStructure(data,period);
-  var strength=calcTrendStrength(data,14);
+  var strength=calcTrendStrength(data,14,highs,lows);
 
   var len=data.length-1;
   var currEma1=ema1[len]||0;
@@ -724,7 +742,7 @@ function calcPriceDeviation(p,ma){
 // ═══════ MARKET CYCLE GAUGE ═══════
 // Single 0-100 reading: 0=Extreme Fear (buy), 100=Extreme Euphoria (sell)
 // Weighted composite of 4 uncorrelated signals
-function calcMarketCycle(priceDev,fg,hrCap,fr,rsi){
+function calcMarketCycle(priceDev,fg,hrCap,fr,rsi,hrMa30,hrMa60){
   // Price Deviation: 35% weight (most reliable historically)
   var pdScore=priceDev;
 
@@ -732,8 +750,19 @@ function calcMarketCycle(priceDev,fg,hrCap,fr,rsi){
   var fgScore=fg;
 
   // Hash Ribbons: 20% weight (miner health - leading indicator)
-  // Capitulation = fear (score 0-20), Recovery = neutral (40-60)
-  var hrScore=hrCap?15:55;
+  // Gradient: deep capitulation (0-15), mild cap (15-30), recovery (30-55), growth (55-70)
+  var hrScore;
+  if(hrCap&&hrMa60>0&&hrMa30>0){
+    var hrDiff=((hrMa30-hrMa60)/hrMa60)*100; // negative = capitulation
+    hrScore=hrDiff<=-10?5:hrDiff<=-5?15:25; // deeper cap = more fear
+  }else if(hrCap){
+    hrScore=15;
+  }else if(hrMa60>0&&hrMa30>0){
+    var hrGrowth=((hrMa30-hrMa60)/hrMa60)*100;
+    hrScore=hrGrowth>10?70:hrGrowth>5?60:50; // stronger growth = more greed
+  }else{
+    hrScore=55;
+  }
 
   // Funding Rate: 10% weight (derivatives positioning)
   // Negative = fear, High positive = greed
@@ -835,8 +864,8 @@ function scoreBuy(priceDev,fg,hrCap,fr,maLoaded,volumeData,obv){
   return{score:totalScore,max:110,indicators:indicators};
 }
 
-// ═══════ SELL SCORE (100 max) - 4 UNCORRELATED INDICATORS ═══════
-function scoreSell(priceDev,fg,fr,rsi,maLoaded){
+// ═══════ SELL SCORE (110 max) - 4 UNCORRELATED INDICATORS + VOLUME CONFIRMATION ═══════
+function scoreSell(priceDev,fg,fr,rsi,maLoaded,volumeData,obv){
   var indicators=[];
   var totalScore=0;
 
@@ -893,7 +922,29 @@ function scoreSell(priceDev,fg,fr,rsi,maLoaded){
     threshold:'>0.05% = Crowded'
   });
 
-  return{score:totalScore,max:100,indicators:indicators};
+  // 5. VOLUME CONFIRMATION (10 pts) - OBV declining AND high volume on down days
+  var volPts=0;
+  if(volumeData&&volumeData.length>=22&&obv&&obv.length>=16){
+    var obvNow=obv[obv.length-2],obv14=obv[obv.length-16];
+    var obvDown=obvNow<obv14;
+    var volSum=0;for(var vi=volumeData.length-22;vi<volumeData.length-2;vi++)volSum+=volumeData[vi].volume;
+    var volMA20=volSum/20;
+    var volAbove=volumeData[volumeData.length-2].volume>volMA20;
+    if(obvDown&&volAbove)volPts=10;
+    else if(obvDown)volPts=5;
+  }
+  totalScore+=volPts;
+  indicators.push({
+    name:'Volume',
+    value:volPts>=10?'CONFIRMED':volPts>=5?'PARTIAL':'Unconfirmed',
+    pts:volPts,max:10,
+    status:volPts>=10?'OBV DOWN + HIGH VOL':volPts>=5?'OBV DOWN':'Waiting',
+    color:volPts>=10?'#ef4444':volPts>=5?'#fb923c':'#64748b',
+    desc:'OBV 14d slope + vol vs 20MA',
+    threshold:'OBV\u2193 + Vol>MA'
+  });
+
+  return{score:totalScore,max:110,indicators:indicators};
 }
 
 // ═══════ ACTION SIGNALS (TREND-AWARE) ═══════
@@ -920,7 +971,7 @@ function getAction(cycle,buyScore,sellScore,trendScore,reversal){
       allocation:100,
       color:'#22c55e',
       desc:'Maximum fear with trend reversal confirmed - deploy aggressively',
-      confidence:buyScore>=70?'HIGH':buyScore>=50?'MEDIUM':'LOW'
+      confidence:buyScore>=77?'HIGH':buyScore>=55?'MEDIUM':'LOW'
     };
   }
   if(cycle<=30){
@@ -939,7 +990,7 @@ function getAction(cycle,buyScore,sellScore,trendScore,reversal){
       allocation:75,
       color:'#22c55e',
       desc:'Fear zone with trend support - strong accumulation',
-      confidence:buyScore>=50?'HIGH':buyScore>=30?'MEDIUM':'LOW'
+      confidence:buyScore>=55?'HIGH':buyScore>=33?'MEDIUM':'LOW'
     };
   }
   if(cycle<=45){
@@ -977,7 +1028,7 @@ function getAction(cycle,buyScore,sellScore,trendScore,reversal){
       allocation:25,
       color:'#fb923c',
       desc:'Getting greedy - take some profits',
-      confidence:sellScore>=30?'MEDIUM':'LOW'
+      confidence:sellScore>=33?'MEDIUM':'LOW'
     };
   }
   if(cycle<=85){
@@ -986,7 +1037,7 @@ function getAction(cycle,buyScore,sellScore,trendScore,reversal){
       allocation:50,
       color:'#f97316',
       desc:'Greed zone - significant profit taking',
-      confidence:sellScore>=50?'HIGH':'MEDIUM'
+      confidence:sellScore>=55?'HIGH':'MEDIUM'
     };
   }
   return{
@@ -994,7 +1045,7 @@ function getAction(cycle,buyScore,sellScore,trendScore,reversal){
     allocation:100,
     color:'#ef4444',
     desc:'Maximum euphoria - exit most positions',
-    confidence:sellScore>=70?'HIGH':sellScore>=50?'MEDIUM':'LOW'
+    confidence:sellScore>=77?'HIGH':sellScore>=55?'MEDIUM':'LOW'
   };
 }
 
@@ -1114,7 +1165,7 @@ function buildGauge(sc,max,color){
 }
 
 // ═══════ RENDER ═══════
-var state={price:{price:0,src:''},ma:{ma:0,ma2y:0,ma90d:0,ma30d:0,ma7d:0,wp:[]},fg:{val:50,txt:'Neutral'},fr:{rate:0},hr:{cap:false},daily:{price:0,closes:[],volumeData:[],obv:[],ema7:0,ema21:0,sma50:0,sma200:0,rsi:50,cross:'none',price7d:0,price30d:0,price90d:0},lastUp:null,countdown:60};
+var state={price:{price:0,src:''},ma:{ma:0,ma2y:0,ma90d:0,ma30d:0,ma7d:0,wp:[]},fg:{val:50,txt:'Neutral'},fr:{rate:0},hr:{cap:false},daily:{price:0,closes:[],highs:[],lows:[],volumeData:[],obv:[],ema7:0,ema21:0,sma50:0,sma200:0,rsi:50,cross:'none',price7d:0,price30d:0,price90d:0},lastUp:null,countdown:60};
 
 function render(){
   var p=state.price,ma=state.ma,fg=state.fg,fr=state.fr,hr=state.hr,daily=state.daily;
@@ -1124,18 +1175,20 @@ function render(){
   // ═══════ CORE CALCULATIONS ═══════
   var priceDev=calcPriceDeviation(p.price,ma.ma);
   var rsi=daily.rsi||50;
-  var cycle=calcMarketCycle(priceDev,fg.val,hr.cap,fr.rate,rsi);
+  var cycle=calcMarketCycle(priceDev,fg.val,hr.cap,fr.rate,rsi,hr.ma30||0,hr.ma60||0);
 
   // Get scores from optimized 5-indicator system (4 core + volume confirmation)
   var buyRes=scoreBuy(priceDev,fg.val,hr.cap,fr.rate,maLoaded,daily.volumeData,daily.obv);
-  var sellRes=scoreSell(priceDev,fg.val,fr.rate,rsi,maLoaded);
+  var sellRes=scoreSell(priceDev,fg.val,fr.rate,rsi,maLoaded,daily.volumeData,daily.obv);
 
   // Trend analysis for smart buy/sell filtering
   var trendCloses=daily.closes||[];
+  var trendHighs=daily.highs||[];
+  var trendLows=daily.lows||[];
   var hasTrendDataEarly=trendCloses.length>=50;
-  var shortTrendEarly=hasTrendDataEarly?analyzeTrend(trendCloses,p.price,30,7,21,20,50):{score:0};
-  var medTrendEarly=hasTrendDataEarly?analyzeTrend(trendCloses,p.price,60,21,50,50,100):{score:0};
-  var longTrendEarly=hasTrendDataEarly?analyzeTrend(trendCloses,p.price,90,50,100,50,200):{score:0};
+  var shortTrendEarly=hasTrendDataEarly?analyzeTrend(trendCloses,p.price,30,7,21,20,50,trendHighs,trendLows):{score:0};
+  var medTrendEarly=hasTrendDataEarly?analyzeTrend(trendCloses,p.price,60,21,50,50,100,trendHighs,trendLows):{score:0};
+  var longTrendEarly=hasTrendDataEarly?analyzeTrend(trendCloses,p.price,90,50,100,50,200,trendHighs,trendLows):{score:0};
   var trendScoreEarly=(shortTrendEarly.score*0.25)+(medTrendEarly.score*0.35)+(longTrendEarly.score*0.40);
 
   // Reversal detection (only meaningful in bear trends)
@@ -1196,7 +1249,7 @@ function render(){
   // ═══════ CONFIDENCE / INDICATOR AGREEMENT ═══════
   var buyActive=buyRes.indicators.filter(function(i){return i.pts>0}).length;
   var sellActive=sellRes.indicators.filter(function(i){return i.pts>0}).length;
-  var agreePct=cycle<=50?Math.round((buyActive/5)*100):Math.round((sellActive/4)*100);
+  var agreePct=cycle<=50?Math.round((buyActive/5)*100):Math.round((sellActive/5)*100);
   var agreeColor=agreePct>=75?'#22c55e':agreePct>=50?'#eab308':'#64748b';
 
   // Buy score classification (scaled to 110 max)
@@ -1211,16 +1264,17 @@ function render(){
   var sellPct=Math.round(sellRes.score/sellRes.max*100);
 
   html+='<div class="confidence-section">';
-  html+='<div class="confidence-header"><span class="confidence-title">Indicator Agreement</span><span class="confidence-value" style="color:'+agreeColor+'">'+(cycle<=50?buyActive:sellActive)+'/'+(cycle<=50?'5':'4')+' indicators confirm ('+(cycle<=50?'buy':'sell')+')</span></div>';
+  html+='<div class="confidence-header"><span class="confidence-title">Indicator Agreement</span><span class="confidence-value" style="color:'+agreeColor+'">'+(cycle<=50?buyActive:sellActive)+'/5 indicators confirm ('+(cycle<=50?'buy':'sell')+')</span></div>';
   html+='<div class="confidence-bar">';
   html+='<div class="confidence-segment" style="width:'+buyPct+'%;background:#22c55e"></div>';
   html+='<div class="confidence-segment" style="width:'+(100-buyPct-sellPct)+'%;background:#334155"></div>';
   html+='<div class="confidence-segment" style="width:'+sellPct+'%;background:#ef4444"></div>';
   html+='</div>';
   html+='<div class="indicator-dots">';
-  for(var i=0;i<buyRes.indicators.length;i++){
-    var ind=buyRes.indicators[i];
-    var dotClass=ind.pts>0?'active-buy':'neutral';
+  var dotIndicators=cycle<=50?buyRes.indicators:sellRes.indicators;
+  for(var i=0;i<dotIndicators.length;i++){
+    var ind=dotIndicators[i];
+    var dotClass=ind.pts>0?(cycle<=50?'active-buy':'active-sell'):'neutral';
     html+='<div class="indicator-dot"><div class="dot '+dotClass+'"></div><div class="name">'+ind.name+'</div></div>';
   }
   html+='</div>';
@@ -1443,11 +1497,22 @@ function render(){
   html+='<div class="pa-row"><span>50/200 SMA</span><span>'+fp(daily.sma50)+' / '+fp(daily.sma200)+'</span></div>';
   html+='</div></div>';
 
-  // Long-term
+  // Long-term (multi-indicator composite instead of 200WMA-only)
   var longPct=ma.ma>0?((p.price-ma.ma)/ma.ma)*100:0;
-  var longColor=longPct>0?'#22c55e':'#ef4444';
-  var longDir=longPct>10?'↑':longPct<-10?'↓':'→';
-  var longLabel=longPct>50?'STRONG BULL':longPct>0?'BULL':longPct>-30?'BEAR':'DEEP BEAR';
+  // Composite long-term score: 200WMA position + death/golden cross + price vs 200d SMA + 90d momentum
+  var ltScore=0;
+  // 200WMA position (+2 to -2)
+  if(longPct>50)ltScore+=2;else if(longPct>10)ltScore+=1;else if(longPct>0)ltScore+=0;else if(longPct>-30)ltScore-=1;else ltScore-=2;
+  // Death/Golden cross signal (+1 or -1)
+  if(crossStatus==='golden'||crossStatus==='bullish')ltScore+=1;else if(crossStatus==='death'||crossStatus==='bearish')ltScore-=1;
+  // Price vs 200-day SMA (+1 or -1)
+  if(dailyLoaded&&daily.sma200>0){if(p.price>daily.sma200)ltScore+=1;else ltScore-=1;}
+  // 90-day momentum (+1 or -1)
+  if(chg90d>10)ltScore+=1;else if(chg90d<-10)ltScore-=1;
+  // Map composite score (-5 to +5) to label
+  var longColor=ltScore>=1?'#22c55e':ltScore<=-1?'#ef4444':'#eab308';
+  var longDir=ltScore>=2?'↑':ltScore<=-2?'↓':'→';
+  var longLabel=ltScore>=4?'STRONG BULL':ltScore>=1?'BULL':ltScore>=-1?'NEUTRAL':ltScore>=-3?'BEAR':'DEEP BEAR';
   html+='<div class="pa-card">';
   html+='<div class="pa-period">Long-Term (Monthly)</div>';
   html+='<div class="pa-main"><span class="pa-signal" style="color:'+longColor+'">'+longDir+'</span><span class="pa-label" style="color:'+longColor+'">'+longLabel+'</span></div>';
@@ -1474,7 +1539,7 @@ function render(){
   html+='<div class="history-item"><div class="h-label">Similar Readings</div><div class="h-value">'+histMatch.period+'</div><div class="h-note">When cycle was '+cycle+'</div></div>';
   html+='<div class="history-item"><div class="h-label">Signal Given</div><div class="h-value" style="color:'+action.color+'">'+histMatch.signal+'</div><div class="h-note">Accuracy: '+histMatch.acc+'</div></div>';
   html+='<div class="history-item"><div class="h-label">Subsequent Result</div><div class="h-value" style="color:'+(cycle<=50?'#22c55e':'#ef4444')+'">'+histMatch.result+'</div><div class="h-note">Following 12 months</div></div>';
-  html+='<div class="history-item"><div class="h-label">Current Indicators</div><div class="h-value">'+(cycle<=50?buyActive:sellActive)+'/4 Confirm</div><div class="h-note">'+(agreePct>=75?'HIGH agreement':'PARTIAL agreement')+'</div></div>';
+  html+='<div class="history-item"><div class="h-label">Current Indicators</div><div class="h-value">'+(cycle<=50?buyActive:sellActive)+'/5 Confirm</div><div class="h-note">'+(agreePct>=75?'HIGH agreement':'PARTIAL agreement')+'</div></div>';
   html+='</div></div>';
 
   // ═══════ STRATEGY ═══════
