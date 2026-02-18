@@ -96,7 +96,7 @@ body{background:#0f172a;color:#e2e8f0;font-family:-apple-system,BlinkMacSystemFo
 .reversal-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
 .reversal-header .title{font-size:12px;color:#94a3b8;text-transform:uppercase;letter-spacing:2px}
 .reversal-header .status{font-size:14px;font-weight:bold;padding:6px 16px;border-radius:6px}
-.reversal-signals{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:16px}
+.reversal-signals{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px}
 .rev-signal{background:#0f172a;border-radius:10px;padding:12px;text-align:center;border:2px solid #334155}
 .rev-signal.active{border-color:#22c55e;box-shadow:0 0 10px rgba(34,197,94,0.2)}
 .rev-signal .rs-icon{font-size:24px;margin-bottom:4px}
@@ -183,8 +183,6 @@ set:function(k,v){this.s[k]={value:v,ts:Date.now()};try{localStorage.setItem('b_
 get:function(k,m){m=m||3600000;if(this.s[k]&&(Date.now()-this.s[k].ts)<m)return this.s[k];try{var x=localStorage.getItem('b_'+k);if(x){var p=JSON.parse(x);this.s[k]=p;if((Date.now()-p.ts)<m)return p;return{value:p.value,ts:p.ts,stale:true}}}catch(e){}return null},
 any:function(k){if(this.s[k])return this.s[k];try{var x=localStorage.getItem('b_'+k);if(x){var p=JSON.parse(x);this.s[k]=p;return{value:p.value,ts:p.ts,stale:true}}}catch(e){}return null}
 };
-
-function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
 
 function fj(url,t){t=t||10000;return new Promise(function(ok,fail){var d=false,tm=setTimeout(function(){d=true;fail(new Error('timeout'))},t);fetch(url).then(function(r){clearTimeout(tm);if(d)return;if(!r.ok)throw new Error(r.status);return r.json()}).then(function(x){if(!d)ok(x)}).catch(function(e){clearTimeout(tm);if(!d)fail(e)})})}
 
@@ -1672,7 +1670,7 @@ function render(){
   // ═══════ FOOTER ═══════
   html+='<div class="footer">';
   html+='<div class="footer-grid"><div>\u2022 Price: Binance</div><div>\u2022 200W MA: CoinGecko</div><div>\u2022 F&G: Alternative.me</div><div>\u2022 Funding: Binance Futures</div><div>\u2022 Hash Rate: Mempool.space</div><div>\u2022 Daily Data: Binance</div></div>';
-  html+='<div class="warn-box warn-yellow"><strong>BEAR MARKET PROTECTION:</strong> Buy signals are suppressed during confirmed downtrends until reversal signals appear (MACD crossover, RSI divergence, EMA reclaim, higher low formation, momentum shift). This prevents knife-catching and waits for the actual bottom.</div>';
+  html+='<div class="warn-box warn-yellow"><strong>BEAR MARKET PROTECTION:</strong> Buy signals are suppressed during confirmed downtrends until reversal signals appear (MACD crossover, RSI divergence, EMA reclaim, higher low formation, volume capitulation, momentum shift). This prevents knife-catching and waits for the actual bottom.</div>';
   html+='<div class="warn-box warn-red"><strong>DISCLAIMER:</strong> Educational purposes only. Not financial advice. Past performance does not guarantee future results. Always manage risk appropriately.</div>';
   html+='</div>';
 
