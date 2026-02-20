@@ -886,18 +886,18 @@ function scoreBuy(priceDev,fg,hrCap,fr,maLoaded,volumeData,obv){
     volAbove=volumeData[volumeData.length-2].volume>volMA20;
     if(obvUp&&volAbove)volPts=10;
     else if(obvUp)volPts=5;
-    // Diagnostic status
-    volStatus='OBV '+(obvUp?'\u2191':'\u2193')+' | Vol '+(volAbove?'>':'<')+' 20MA';
+    // Human-readable status
+    volStatus=obvUp?(volAbove?'Strong buying pressure':'Buying pressure building'):(volAbove?'High volume, mixed flow':'Low buying pressure');
   }
   totalScore+=volPts;
   indicators.push({
     name:'Volume',
-    value:volPts>=10?'CONFIRMED':volPts>=5?'PARTIAL':'Unconfirmed',
+    value:volPts>=10?'STRONG':volPts>=5?'RISING':'NEUTRAL',
     pts:volPts,max:10,
-    status:volPts>=10?'OBV UP + HIGH VOL':volStatus,
+    status:volStatus,
     color:volPts>=10?'#22c55e':volPts>=5?'#86efac':'#64748b',
     desc:'OBV 14d slope + vol vs 20MA',
-    buyZone:'OBV\u2191 + Vol>MA',sellZone:'--'
+    buyZone:'Strong flow',sellZone:'--'
   });
 
   return{score:totalScore,max:110,indicators:indicators};
@@ -971,17 +971,17 @@ function scoreSell(priceDev,fg,fr,rsi,maLoaded,volumeData,obv){
     sVolAbove=volumeData[volumeData.length-2].volume>volMA20;
     if(obvDown&&sVolAbove)volPts=10;
     else if(obvDown)volPts=5;
-    sVolStatus='OBV '+(obvDown?'\u2193':'\u2191')+' | Vol '+(sVolAbove?'>':'<')+' 20MA';
+    sVolStatus=obvDown?(sVolAbove?'Strong selling pressure':'Selling pressure building'):(sVolAbove?'High volume, mixed flow':'Low selling pressure');
   }
   totalScore+=volPts;
   indicators.push({
     name:'Volume',
-    value:volPts>=10?'CONFIRMED':volPts>=5?'PARTIAL':'Unconfirmed',
+    value:volPts>=10?'STRONG':volPts>=5?'RISING':'NEUTRAL',
     pts:volPts,max:10,
-    status:volPts>=10?'OBV DOWN + HIGH VOL':sVolStatus,
+    status:sVolStatus,
     color:volPts>=10?'#ef4444':volPts>=5?'#fb923c':'#64748b',
     desc:'OBV 14d slope + vol vs 20MA',
-    threshold:'OBV\u2193 + Vol>MA'
+    threshold:'Strong flow'
   });
 
   return{score:totalScore,max:110,indicators:indicators};
@@ -1344,9 +1344,13 @@ function render(){
   html+='<div class="confidence-section">';
   html+='<div class="confidence-header"><span class="confidence-title">Indicator Agreement</span><span class="confidence-value" style="color:'+agreeColor+'">'+(cycle<=50?buyActive:sellActive)+'/5 indicators confirm ('+(cycle<=50?'buy':'sell')+')</span></div>';
   html+='<div class="confidence-bar">';
-  html+='<div class="confidence-segment" style="width:'+buyPct+'%;background:#22c55e"></div>';
-  html+='<div class="confidence-segment" style="width:'+(100-buyPct-sellPct)+'%;background:#334155"></div>';
-  html+='<div class="confidence-segment" style="width:'+sellPct+'%;background:#ef4444"></div>';
+  if(cycle<=50){
+    html+='<div class="confidence-segment" style="width:'+buyPct+'%;background:#22c55e"></div>';
+    html+='<div class="confidence-segment" style="width:'+(100-buyPct)+'%;background:#334155"></div>';
+  }else{
+    html+='<div class="confidence-segment" style="width:'+(100-sellPct)+'%;background:#334155"></div>';
+    html+='<div class="confidence-segment" style="width:'+sellPct+'%;background:#ef4444"></div>';
+  }
   html+='</div>';
   html+='<div class="indicator-dots">';
   var dotIndicators=cycle<=50?buyRes.indicators:sellRes.indicators;
