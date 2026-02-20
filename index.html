@@ -1344,9 +1344,13 @@ function render(){
   html+='<div class="confidence-section">';
   html+='<div class="confidence-header"><span class="confidence-title">Indicator Agreement</span><span class="confidence-value" style="color:'+agreeColor+'">'+(cycle<=50?buyActive:sellActive)+'/5 indicators confirm ('+(cycle<=50?'buy':'sell')+')</span></div>';
   html+='<div class="confidence-bar">';
-  html+='<div class="confidence-segment" style="width:'+buyPct+'%;background:#22c55e"></div>';
-  html+='<div class="confidence-segment" style="width:'+(100-buyPct-sellPct)+'%;background:#334155"></div>';
-  html+='<div class="confidence-segment" style="width:'+sellPct+'%;background:#ef4444"></div>';
+  if(cycle<=50){
+    html+='<div class="confidence-segment" style="width:'+buyPct+'%;background:#22c55e"></div>';
+    html+='<div class="confidence-segment" style="width:'+(100-buyPct)+'%;background:#334155"></div>';
+  }else{
+    html+='<div class="confidence-segment" style="width:'+(100-sellPct)+'%;background:#334155"></div>';
+    html+='<div class="confidence-segment" style="width:'+sellPct+'%;background:#ef4444"></div>';
+  }
   html+='</div>';
   html+='<div class="indicator-dots">';
   var dotIndicators=cycle<=50?buyRes.indicators:sellRes.indicators;
